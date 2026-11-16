@@ -202,17 +202,68 @@ static void clock_init_firc(void)
     while (!(SCG_FIRCCSR & SCG_FIRCCSR_FIRCVLD)) {}
 }
 
+#ifdef S32K1XX_CLOCK_80MHZ
+#if defined(S32K1XX_CLOCK_HSRUN)
+#error "S32K1XX_CLOCK_80MHZ and S32K1XX_CLOCK_HSRUN are mutually exclusive"
+#endif
+
+/* Crystal on the SOSC (EXTAL/XTAL) pins */
+#ifndef S32K1XX_SOSC_FREQ
+#define S32K1XX_SOSC_FREQ 8000000UL
+#endif
+
+/* VCO_CLK = SOSC / (PREDIV + 1) * (MULT + 16) = 320 MHz, SPLL_CLK = 160 MHz */
+#define SPLL_VCO_FREQ   320000000UL
+#define SPLL_MULT       ((SPLL_VCO_FREQ / S32K1XX_SOSC_FREQ) - 16UL)
+#if (SPLL_VCO_FREQ % S32K1XX_SOSC_FREQ) != 0 || \
+    (SPLL_VCO_FREQ / S32K1XX_SOSC_FREQ) < 16 || \
+    (SPLL_VCO_FREQ / S32K1XX_SOSC_FREQ) > 47
+#error "S32K1XX_SOSC_FREQ cannot produce a 320 MHz VCO with PREDIV=0"
+#endif
+
+/* RUN mode at 80 MHz (reference manual "Normal RUN" example):
+ * SOSC -> SPLL 160 MHz -> CORE/SYS 80 MHz (/2), BUS 40 MHz (/2 of core),
+ * FLASH 26.67 MHz (/3 of core, the RUN mode maximum).
+ */
 static void clock_init_spll(void)
 {
-    /* S32K1xx SPLL requires SOSC as source (FIRC cannot be used directly).
-     * For 112 MHz with 8 MHz SOSC: PREDIV=0, MULT=28 -> VCO=224 MHz, SPLL=112 MHz
-     * VCO range: 180-320 MHz, SPLL_CLK = VCO / 2
-     *
-     * Currently using FIRC 48 MHz directly. TODO: Add SOSC + SPLL for 112 MHz.
-     */
-    SCG_SPLLCSR &= ~SCG_SPLLCSR_SPLLEN;
-    SCG_SPLLDIV = (2UL << 8) | (4UL << 0);  /* SPLLDIV1=/2, SPLLDIV2=/4 */
+    /* SOSC: crystal, high range (required when it feeds the SPLL) */
+    SCG_SOSCCSR = 0;
+    SCG_SOSCDIV = (1UL << 8) | (1UL << 0);  /* SOSCDIV1=/1, SOSCDIV2=/1 */
+    SCG_SOSCCFG = SCG_SOSCCFG_RANGE_HIGH | SCG_SOSCCFG_EREFS;
+    SCG_SOSCCSR = SCG_SOSCCSR_SOSCEN;
+    while (!(SCG_SOSCCSR & SCG_SOSCCSR_SOSCVLD)) {}
+
+    /* SPLL: SPLLCFG can only be written while the SPLL is disabled */
+    SCG_SPLLCSR = 0;
+    SCG_SPLLDIV = (2UL << SCG_SPLLDIV_SPLLDIV1_SHIFT) |  /* /2: 80 MHz */
+                  (3UL << SCG_SPLLDIV_SPLLDIV2_SHIFT);   /* /4: 40 MHz */
+    SCG_SPLLCFG = (SPLL_MULT << SCG_SPLLCFG_MULT_SHIFT) |
+                  (0UL << SCG_SPLLCFG_PREDIV_SHIFT);
+    SCG_SPLLCSR = SCG_SPLLCSR_SPLLEN;
+    while (!(SCG_SPLLCSR & SCG_SPLLCSR_SPLLVLD)) {}
+
+    /* Switch the system clock to the SPLL */
+    SCG_RCCR = SCG_xCCR_SCS_SPLL |
+               (1UL << SCG_xCCR_DIVCORE_SHIFT) |
+               (1UL << SCG_xCCR_DIVBUS_SHIFT) |
+               (2UL << SCG_xCCR_DIVSLOW_SHIFT);
+    while ((SCG_CSR & SCG_CSR_SCS_MASK) != SCG_CSR_SCS_SPLL) {}
 }
+
+/* Stop the SPLL and SOSC once the system clock no longer uses them */
+static void clock_stop_spll(void)
+{
+    SCG_SPLLCSR = 0;
+    SCG_SOSCCSR = 0;
+}
+
+void s32k1xx_clock_80mhz(void)
+{
+    if ((SCG_CSR & SCG_CSR_SCS_MASK) != SCG_CSR_SCS_SPLL)
+        clock_init_spll();
+}
+#endif /* S32K1XX_CLOCK_80MHZ */
 
 static void clock_init(void)
 {
@@ -232,6 +283,10 @@ static void clock_init(void)
 
     /* Wait for clock switch */
     while ((SCG_CSR & SCG_CSR_SCS_MASK) != SCG_CSR_SCS_FIRC) {}
+
+#ifdef S32K1XX_CLOCK_80MHZ
+    clock_init_spll();
+#endif
 
 #ifdef S32K1XX_CLOCK_HSRUN
     /* HSRUN mode (112 MHz) - requires SOSC + SPLL (not fully implemented yet)
@@ -255,6 +310,52 @@ static void clock_init(void)
     while ((SMC_PMSTAT & 0xFF) != SMC_PMSTAT_HSRUN) {}
 #endif
 }
+
+/* ============== Code Cache ============== */
+
+#ifdef S32K1XX_CODE_CACHE
+/* The cache is write-through for Program Flash (region 0). Flash erase and
+ * program commands bypass it, so it is invalidated after each command. */
+static void RAMFUNCTION cache_invalidate(void)
+{
+    if (LMEM_PCCCR & LMEM_PCCCR_ENCACHE) {
+        LMEM_PCCCR |= LMEM_PCCCR_INVW0 | LMEM_PCCCR_INVW1 | LMEM_PCCCR_GO;
+        while (LMEM_PCCCR & LMEM_PCCCR_GO) {}
+    }
+}
+
+static void cache_enable(void)
+{
+    /* FlexNVM (region 2) must not be cached on MCXE247. A region can only
+     * be demoted, until the next reset. */
+    LMEM_PCCRMR &= ~LMEM_PCCRMR_R2_MASK;
+
+    /* The tags are not cleared at reset: invalidate, then enable */
+    LMEM_PCCCR = LMEM_PCCCR_INVW0 | LMEM_PCCCR_INVW1 | LMEM_PCCCR_GO;
+    while (LMEM_PCCCR & LMEM_PCCCR_GO) {}
+    LMEM_PCCCR = LMEM_PCCCR_ENCACHE;
+    DSB();
+    ISB();
+}
+
+static void cache_disable(void)
+{
+    cache_invalidate();
+    LMEM_PCCCR = 0;
+    DSB();
+    ISB();
+}
+#else
+#define cache_invalidate() do {} while (0)
+#endif /* S32K1XX_CODE_CACHE */
+
+#ifdef S32K1XX_CODE_CACHE
+void s32k1xx_code_cache_enable(void)
+{
+    if ((LMEM_PCCCR & LMEM_PCCCR_ENCACHE) == 0U)
+        cache_enable();
+}
+#endif
 
 /* ============== UART Functions ============== */
 
@@ -401,6 +502,7 @@ static int RAMFUNCTION flash_program_phrase(uint32_t address, const uint8_t *dat
 
     /* Wait for completion */
     flash_wait_complete();
+    cache_invalidate();
 
 #ifdef WATCHDOG
     /* Refresh watchdog after flash operation */
@@ -441,6 +543,7 @@ static int RAMFUNCTION flash_erase_sector_internal(uint32_t address)
 
     /* Wait for completion */
     flash_wait_complete();
+    cache_invalidate();
 
     /* Re-enable interrupts */
     __set_PRIMASK(primask);
@@ -467,6 +570,10 @@ void hal_init(void)
 
     /* Initialize clocks */
     clock_init();
+
+#ifdef S32K1XX_CODE_CACHE
+    cache_enable();
+#endif
 
     /* Enable clock to flash controller */
     PCC_FTFC |= PCC_CGC;
@@ -502,11 +609,26 @@ void hal_prepare_boot(void)
     LPUART_CTRL = 0;
 #endif
 
+#ifdef S32K1XX_CODE_CACHE
+    /* Leave the cache as it is after reset (disabled) for the application */
+    cache_disable();
+#endif
+
 #ifdef WOLFBOOT_RESTORE_CLOCK
     /* Restore clock to SIRC (8 MHz) before booting application.
      * This gives the application a known clock state to start from.
      */
     clock_restore_sirc();
+#elif defined(S32K1XX_CLOCK_80MHZ)
+    /* Return to the default FIRC 48 MHz RUN configuration */
+    SCG_RCCR = SCG_xCCR_SCS_FIRC |
+               (0UL << SCG_xCCR_DIVCORE_SHIFT) |
+               (0UL << SCG_xCCR_DIVBUS_SHIFT) |
+               (1UL << SCG_xCCR_DIVSLOW_SHIFT);
+    while ((SCG_CSR & SCG_CSR_SCS_MASK) != SCG_CSR_SCS_FIRC) {}
+#endif
+#ifdef S32K1XX_CLOCK_80MHZ
+    clock_stop_spll();
 #endif
 
     /* Re-enable watchdog before booting application.

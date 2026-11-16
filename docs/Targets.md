@@ -7173,7 +7173,9 @@ The following build options are available for the S32K1xx HAL:
 | `WATCHDOG` | Enable the watchdog during wolfBoot operation. wolfBoot calls `wolfBoot_watchdog_feed()` from its hash and copy/erase loops -- a weak no-op a port overrides to service its watchdog (e.g. external MAX6316-MAX6322, see `hal/renesas-rx.c`). |
 | `WATCHDOG_TIMEOUT_MS` | Watchdog timeout in milliseconds when `WATCHDOG` is enabled (default: 1000ms). |
 | `S32K1XX_CLOCK_HSRUN` | Enable HSRUN mode (112 MHz). Requires external crystal and SPLL (not fully implemented). |
-| `DEBUG_UART` | Enable LPUART1 debug output. |
+| `S32K1XX_CLOCK_80MHZ` | Run wolfBoot at 80 MHz (RUN mode) from the external crystal through the SPLL, instead of the 48 MHz FIRC. The crystal frequency is `S32K1XX_SOSC_FREQ` (default 8 MHz). The clock is switched back before the application starts; the s32k1xx test-app switches to 80 MHz again with `s32k1xx_clock_80mhz()`. Tested on the MCXE247 only. |
+| `S32K1XX_CODE_CACHE` | Enable the 4 KB LMEM code cache for flash while wolfBoot runs. It is invalidated after every flash erase and program command, and disabled before the application starts; the s32k1xx test-app enables it again with `s32k1xx_code_cache_enable()`. Tested on the MCXE247 only. |
+| `DEBUG_UART` | Enable LPUART debug output. |
 | `DEBUG_HARDFAULT` | Enable detailed hard fault debugging output. |
 | `S32K144`, `S32K146`, `S32K148` | Select variant (default is S32K142). Affects flash/SRAM size definitions. |
 | `WOLFBOOT_FOPT` | Override the Flash Option Byte (FOPT) in the Flash Configuration Field (FCF at 0x40D). Default is `0xFF`. Set via `CFLAGS_EXTRA+=-DWOLFBOOT_FOPT=0xF7` in your `.config` file. See FOPT bit field table below. |
@@ -7381,6 +7383,16 @@ apply to the MCXE247, with these differences:
   and with 163 interrupts it must be 1 KB aligned: with the default 256-byte
   header the core fetches the vectors of IRQ 48 and up (the ENET interrupts
   among them) from the wrong slots.
+- `mcxe247.config` sets `S32K1XX_CLOCK_80MHZ` and `S32K1XX_CODE_CACHE`, which
+  run wolfBoot at 80 MHz from the board's 8 MHz crystal with the code cache on.
+  On the FRDM-MCXE247 this cuts the time from `wolfBoot_start` to the jump to
+  the application from about 205 ms to about 128 ms (88 KB image,
+  ECDSA P-256 with SHA-256, including the console messages). The application
+  still starts with the cache disabled and the clock on the 8 MHz SIRC
+  (`WOLFBOOT_RESTORE_CLOCK`, the default) or the 48 MHz FIRC. The test-app
+  then switches to 80 MHz and enables the cache again. SRAM_L, where the
+  network test keeps the wolfIP state, is not behind the cache (only flash
+  is cacheable).
 
 ### NXP MCXE247: Network test
 

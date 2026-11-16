@@ -332,7 +332,8 @@ static void print_hex(const uint8_t* buffer, uint32_t length, int dumpChars)
 
 static const char* part_state_name(uint8_t state, int state_retval)
 {
-    if (state_retval == 0) {
+    /* wolfBoot_get_partition_state() returns 0 when it read a state */
+    if (state_retval != 0) {
         return "(no trailer)";
     }
     switch (state) {
@@ -1007,6 +1008,14 @@ void main(void)
 
     /* Ensure FIRC clock is running at 48 MHz for UART */
     clock_ensure_firc();
+#ifdef S32K1XX_CLOCK_80MHZ
+    /* wolfBoot hands over on SIRC or FIRC: run the core at 80 MHz. The UART
+     * stays on FIRC; SysTick follows CLOCK_SPEED. */
+    s32k1xx_clock_80mhz();
+#endif
+#ifdef S32K1XX_CODE_CACHE
+    s32k1xx_code_cache_enable();
+#endif
 
 #ifdef DEBUG_UART
     /* Reinitialize UART - bootloader may have changed settings in hal_prepare_boot */
