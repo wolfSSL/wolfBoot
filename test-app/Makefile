@@ -1758,6 +1758,12 @@ ifeq ($(ENABLE_WOLFIP),1)
     # memcpy (checksum words, header fields) into a call to the byte-wise
     # memcpy in src/string.c, which cost most of the stack's CPU time
     WOLFIP_CFLAGS_OUT:=-ffreestanding
+    # The stack is CPU bound: -O2 (after the global -Os) is 10-18% faster for
+    # 12KB more flash. Take at most 8 frames per wolfIP_poll() so the app can
+    # drain a socket between batches; with the default 128 a line-rate UDP
+    # flood fills the 6-datagram socket buffer and most frames are processed
+    # only to be dropped
+    WOLFIP_CFLAGS_ADD:=-O2 -DWOLFIP_POLL_BUDGET=8
     # Driver cycle counters for the throughput test's CPU breakdown
     ifeq ($(WOLFIP_SPEED_TEST),1)
       CFLAGS+=-DNXP_MCXE_ENET_STATS=1
@@ -1793,7 +1799,7 @@ ifeq ($(ENABLE_WOLFIP),1)
   WOLFIP_CFLAGS:=-I"$(WOLFIP_PORTDIR)" -I"$(WOLFBOOT_LIB_WOLFIP)" \
     $(filter-out -Werror -Wstack-usage=$(STACK_USAGE_LIMIT) $(WOLFIP_CFLAGS_OUT),$(CFLAGS)) \
     -DWOLFIP_ENABLE_TFTP=$(if $(filter 1,$(WOLFBOOT_TEST_TFTP)),1,0) \
-    -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers
+    -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers $(WOLFIP_CFLAGS_ADD)
 endif
 
 ifeq ($(WOLFHSM_CLIENT),1)
