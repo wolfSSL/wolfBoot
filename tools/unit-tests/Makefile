@@ -197,6 +197,7 @@ TESTS+=unit-rp2350-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
 TESTS+=unit-fdt-memrsv-wrap
+TESTS+=unit-psci
 TESTS+=unit-fdt-addr32
 TESTS+=unit-ns16550
 TESTS+=unit-zynq-dma-range
@@ -891,6 +892,9 @@ unit-store-sbrk: unit-store-sbrk.c ../../src/store_sbrk.c
 
 unit-string: ../../include/target.h unit-string.c
 	gcc -o $@ $^ $(CFLAGS) -DDEBUG_UART -DPRINTF_ENABLED $(LDFLAGS)
+
+unit-psci: ../../include/target.h unit-psci.c ../../src/psci.c
+	gcc -o $@ unit-psci.c $(CFLAGS) $(LDFLAGS)
 
 unit-arm-tee-psa-ipc: ../../include/target.h unit-arm-tee-psa-ipc.c ../../src/arm_tee_psa_ipc.c
 	gcc -o $@ unit-arm-tee-psa-ipc.c $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa \

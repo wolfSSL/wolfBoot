@@ -158,6 +158,7 @@ tools/unit-tests/unit-update-disk-fs
 tools/unit-tests/unit-update-disk-fs-enc
 tools/unit-tests/unit-update-disk-fs-confirm
 tools/unit-tests/unit-update-disk-fs-confirm-fdt
+tools/unit-tests/unit-psci
 tools/unit-tests/ext4-min.img
 tools/unit-tests/ext4-stock.img
 tools/unit-tests/ext4-payload.bin
