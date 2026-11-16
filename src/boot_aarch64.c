@@ -179,6 +179,11 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
         if ((dts_offset != NULL) && (wolfBoot_disk_boot_part() >= 0)) {
             wolfBoot_panic();
         }
+#elif defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
+        /* Same for the fixed-slot RAM loader. */
+        if ((dts_offset != NULL) && (wolfBoot_ramboot_part() >= 0)) {
+            wolfBoot_panic();
+        }
 #endif
     }
 #endif

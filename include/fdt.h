@@ -375,6 +375,9 @@ int fdt_fixup_chosen_val(fdt_ctx* ctx, const char* name, uint32_t val);
 int wolfBoot_disk_dts_fixup(fdt_ctx* ctx);
 #endif
 
+/* Slot (PART_BOOT / PART_UPDATE) the RAM-boot loader verified, or -1. */
+int wolfBoot_ramboot_part(void);
+
 /* Write /chosen/linux,initrd-{start,end} as 64-bit big-endian values,
  * creating /chosen if needed. Returns 0 or a negative FDT_ERR_*. */
 int fdt_fixup_initrd(fdt_ctx* ctx, uint64_t start, uint64_t size);

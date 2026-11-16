@@ -34,6 +34,10 @@
 int WP11_Library_Init(void);
 #endif
 
+#ifdef WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED
+#error DUALBOOT_ROLLBACK_UNCONFIRMED is only supported by the RAM loader
+#endif
+
 extern void hal_flash_dualbank_swap(void);
 
 static inline void boot_panic(void)

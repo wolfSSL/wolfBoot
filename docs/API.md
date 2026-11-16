@@ -25,13 +25,19 @@ Basic interaction from the application is provided via the following high-level 
 
 `void wolfBoot_update_trigger(void)`
 
+`void wolfBoot_update_trigger_part(uint8_t part)`
+
 `void wolfBoot_success(void)`
+
+`void wolfBoot_success_part(uint8_t part)`
 
 ### Firmware version
 
 Current (boot) firmware and update firmware versions can be retrieved from the application using:
 
 `uint32_t wolfBoot_get_image_version(uint8_t part)`
+
+On an MMU target that keeps its images encrypted in flash (`EXT_ENCRYPTED` with `MMU`), only the bootloader holds the key, so this call returns 0 from the application for an encrypted partition.
 
 Or via the shortcut macros:
 
@@ -51,7 +57,11 @@ to `STATE_UPDATING`, instructing the bootloader to perform the update upon the n
 wolfBoot update process swaps the contents of the UPDATE and the BOOT partitions, using a temporary
 single-block SWAP space.
 
+  - `wolfBoot_update_trigger_part(part)` does the same for the given partition. `PART_UPDATE` is identical to `wolfBoot_update_trigger()`. A fixed-slot dual-boot application running from the update partition, which stored the new image in the BOOT partition, passes `PART_BOOT`. `PART_BOOT` is ignored with `NVM_FLASH_WRITEONCE`, `NVM_FLASH_JOURNAL`, `FLAGS_HOME`, or an encryption key kept in flash; any other value is ignored.
+
 ### Confirm current image
+
+- `wolfBoot_success_part(part)` marks `PART_BOOT` or `PART_UPDATE` as successful and ignores any other value. A fixed-slot dual-boot application that may run from either partition passes the one it was booted from, which the bootloader reports to it (on Versal, the `/chosen/wolfboot,boot-part` device tree property). `wolfBoot_success()` is the same call for `PART_BOOT`.
 
 - `wolfBoot_success()` indicates a successful boot of a new firmware. This can be called by the application
 at any time, but it will only be effective to mark the current firmware (in the BOOT partition) with the state

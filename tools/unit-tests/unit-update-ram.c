@@ -375,6 +375,9 @@ START_TEST (test_sunnyday_noupdate)
     wolfBoot_start();
     ck_assert(wolfBoot_staged_ok);
     ck_assert(get_version_ramloaded() == 1);
+#if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
+    ck_assert_int_eq(wolfBoot_ramboot_part(), PART_BOOT);
+#endif
     ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), -1);
 #ifndef TZEN
     ck_assert_int_eq(mock_flash_protect_called, 1);
@@ -408,6 +411,9 @@ START_TEST (test_forward_update_samesize) {
     wolfBoot_start();
     ck_assert(wolfBoot_staged_ok);
     ck_assert(get_version_ramloaded() == 2);
+#if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
+    ck_assert_int_eq(wolfBoot_ramboot_part(), PART_UPDATE);
+#endif
     assert_part_state(PART_UPDATE, IMG_STATE_TESTING);
     cleanup_flash();
 }
@@ -567,7 +573,13 @@ START_TEST (test_emergency_rollback_to_older_version_denied) {
 
     wolfBoot_start();
     ck_assert(wolfBoot_staged_ok);
+#ifdef WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED
+    /* The unconfirmed image is dropped for the older confirmed one. */
+    ck_assert_int_eq(get_version_ramloaded(), 1);
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 0U);
+#else
     ck_assert_int_eq(get_version_ramloaded(), 2);
+#endif
     ck_assert_int_eq(wolfBoot_panicked, 0);
     cleanup_flash();
 }
@@ -587,10 +599,114 @@ START_TEST (test_dualboot_candidate_rejects_testing_rollback_to_lower_version) {
     ext_flash_lock();
 
     candidate = wolfBoot_dualboot_candidate();
+#ifdef WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED
+    /* Falls back to the lower version. The unconfirmed slot is kept until
+     * the loader has verified the fallback. */
+    ck_assert_int_eq(candidate, PART_UPDATE);
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2U);
+    ck_assert_uint_eq(wolfBoot_update_firmware_version(), 1U);
+    wolfBoot_dualboot_erase_rejected(candidate);
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 0U);
+    ck_assert_uint_eq(wolfBoot_update_firmware_version(), 1U);
+#else
     ck_assert_int_eq(candidate, PART_BOOT);
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2U);
+#endif
+    cleanup_flash();
+}
+
+#ifdef WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED
+/* The fallback of an unconfirmed image fails verification: the unconfirmed
+ * image must still be there to boot. */
+START_TEST (test_rollback_unconfirmed_bad_fallback_keeps_image) {
+    uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
+    uint8_t bad_digest[SHA256_DIGEST_SIZE];
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 2, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL);
+    memset(bad_digest, 0xBA, SHA256_DIGEST_SIZE);
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 5,
+            testing_flags, 5);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4,
+            bad_digest, SHA256_DIGEST_SIZE);
+    ext_flash_lock();
+
+    wolfBoot_start();
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(get_version_ramloaded(), 2);
     ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2U);
     cleanup_flash();
 }
+END_TEST
+#endif
+
+/* An image booted from the update partition confirms that partition. */
+START_TEST (test_success_part_update) {
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+    wolfBoot_update_trigger();
+    wolfBoot_start();
+    ck_assert(wolfBoot_staged_ok);
+    assert_part_state(PART_UPDATE, IMG_STATE_TESTING);
+
+    wolfBoot_success_part(PART_UPDATE);
+    assert_part_state(PART_UPDATE, IMG_STATE_SUCCESS);
+
+    /* Still selected, and kept, on the next boot. */
+    ck_assert_int_eq(wolfBoot_dualboot_candidate(), PART_UPDATE);
+    ck_assert_uint_eq(wolfBoot_update_firmware_version(), 2U);
+
+    /* Any other partition id is ignored. */
+    wolfBoot_success_part(PART_SWAP);
+    wolfBoot_success_part(0xFF);
+    assert_part_state(PART_UPDATE, IMG_STATE_SUCCESS);
+    cleanup_flash();
+}
+END_TEST
+
+/* An application running from the update partition arms an image it wrote
+ * to the boot partition. */
+START_TEST (test_update_trigger_part_boot) {
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+    wolfBoot_update_trigger_part(PART_UPDATE);
+    assert_part_state(PART_UPDATE, IMG_STATE_UPDATING);
+    wolfBoot_start();
+    ck_assert_uint_eq(get_version_ramloaded(), 2U);
+    wolfBoot_success_part(PART_UPDATE);
+
+    add_payload(PART_BOOT, 3, TEST_SIZE_SMALL);
+    /* Any other partition id is ignored. */
+    wolfBoot_update_trigger_part(PART_SWAP);
+    wolfBoot_update_trigger_part(0xFF);
+    assert_part_state(PART_UPDATE, IMG_STATE_SUCCESS);
+    wolfBoot_update_trigger_part(PART_BOOT);
+    assert_part_state(PART_BOOT, IMG_STATE_UPDATING);
+    assert_part_state(PART_UPDATE, IMG_STATE_SUCCESS);
+
+    wolfBoot_start();
+    ck_assert_uint_eq(get_version_ramloaded(), 3U);
+    ck_assert_int_eq(wolfBoot_ramboot_part(), PART_BOOT);
+    assert_part_state(PART_BOOT, IMG_STATE_TESTING);
+    assert_part_state(PART_UPDATE, IMG_STATE_SUCCESS);
+
+#ifdef WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED
+    /* Reset without confirming: back to the confirmed update partition. */
+    wolfBoot_start();
+    ck_assert_uint_eq(get_version_ramloaded(), 2U);
+    ck_assert_int_eq(wolfBoot_ramboot_part(), PART_UPDATE);
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 0U);
+#endif
+    cleanup_flash();
+}
+END_TEST
 
 START_TEST (test_emergency_rollback_failure_due_to_bad_update) {
     uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
@@ -700,6 +816,12 @@ Suite *wolfboot_suite(void)
     tcase_add_test(dualboot_candidate_rollback_denied,
         test_dualboot_candidate_rejects_testing_rollback_to_lower_version);
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
+#ifdef WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED
+    tcase_add_test(emergency_rollback_failure_due_to_bad_update,
+        test_rollback_unconfirmed_bad_fallback_keeps_image);
+#endif
+    tcase_add_test(emergency_rollback, test_success_part_update);
+    tcase_add_test(emergency_rollback, test_update_trigger_part_boot);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);
     tcase_add_test(both_images_corrupted, test_both_images_corrupted_panics);

@@ -1126,6 +1126,13 @@ ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
   endif
 endif
 
+# Dual-boot (two fixed slots, no swap): an image that was booted on probation
+# and never confirmed is dropped in favour of the other slot even when that
+# slot holds a lower version. Anti-rollback still applies to confirmed images.
+ifeq ($(DUALBOOT_ROLLBACK_UNCONFIRMED),1)
+  CFLAGS+=-D"WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED"
+endif
+
 # Optional boot confirmation and rollback for disk boot (src/update_disk.c).
 # wolfBoot marks the slot it boots as TESTING in the last sector of that raw
 # partition; the OS clears it to SUCCESS once it is up. A slot still marked
@@ -2027,7 +2034,7 @@ endif
 # Support external encryption cache
 #
 ifeq ($(ENCRYPT),1)
-  ifeq ($(ENCRYPT_CACHE),1)
+  ifneq ($(ENCRYPT_CACHE),)
 	CFLAGS+=-D"WOLFBOOT_ENCRYPT_CACHE=$(ENCRYPT_CACHE)"
   endif
 endif

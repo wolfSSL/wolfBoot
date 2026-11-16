@@ -64,6 +64,16 @@ extern uint8_t _end[];  /* linker symbol: end of wolfBoot BSS */
     #define WOLFBOOT_USE_RAMBOOT
 #endif
 
+#if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
+/* Slot the verified image was taken from, for the booted image to confirm. */
+static int ramboot_part = -1;
+
+int wolfBoot_ramboot_part(void)
+{
+    return ramboot_part;
+}
+#endif
+
 #ifdef WOLFBOOT_USE_RAMBOOT
 
 /* Function to load image from flash to ram */
@@ -366,6 +376,9 @@ void RAMFUNCTION wolfBoot_start(void)
       #if defined(EXT_ENCRYPTED) && defined(MMU)
         ret = wolfBoot_ram_decrypt((uint8_t*)source_address,
             (uint8_t*)load_address);
+        #ifdef WOLFBOOT_RAM_DECRYPT_EXT
+        os_image.not_ext = 1;
+        #endif
       #else
         ret = wolfBoot_ramboot(&os_image, (uint8_t*)source_address,
             (uint8_t*)load_address);
@@ -468,6 +481,9 @@ backup_on_failure:
 #endif
 
     wolfBoot_printf("Firmware Valid\n");
+#if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
+    ramboot_part = active;
+#endif
 
     /* First time we boot this update, set to TESTING to await
      * confirmation from the system
@@ -867,6 +883,12 @@ backup_on_failure:
      * an unvalidated blob. */
     wolfboot_dts_addr = (void*)dts_addr;
 #endif
+#if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS) && \
+    defined(WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED)
+    /* The fallback is verified and loaded. */
+    wolfBoot_dualboot_erase_rejected(active);
+#endif
+
 #ifdef WOLFBOOT_HOOK_PREBOOT
     /* Before hal_prepare_boot(), so a hook still has the MMU and caches as
      * wolfBoot set them up. */

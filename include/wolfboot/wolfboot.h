@@ -789,7 +789,9 @@ extern "C" {
 #endif
 
 void wolfBoot_update_trigger(void);
+void wolfBoot_update_trigger_part(uint8_t part);
 void wolfBoot_success(void);
+void wolfBoot_success_part(uint8_t part);
 uint32_t wolfBoot_image_size(uint8_t *image);
 uint32_t wolfBoot_get_blob_version(uint8_t *blob);
 uint16_t wolfBoot_get_blob_type(uint8_t *blob);
@@ -822,6 +824,9 @@ int wolfBoot_clear_trailer(uint8_t part);
 
 int wolfBoot_fallback_is_possible(void);
 int wolfBoot_dualboot_candidate(void);
+#ifdef WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED
+void wolfBoot_dualboot_erase_rejected(int active);
+#endif
 
 int wolfBoot_dualboot_candidate_addr(void**);
 int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
@@ -905,7 +910,8 @@ int wolfBoot_record_failure(uint8_t phase, uint8_t cause, uint8_t partition,
 
 #endif /* EXT_ENCRYPTED */
 
-#if defined(EXT_ENCRYPTED) && defined(MMU)
+#if defined(EXT_ENCRYPTED) && defined(MMU) && \
+    (defined(__WOLFBOOT) || defined(UNIT_TEST))
 int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst);
 #endif
 

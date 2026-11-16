@@ -506,6 +506,12 @@ downgrades, compile with `ALLOW_DOWNGRADE=1`.
 Warning: this option will disable version checking before the updates, thus exposing the system to potential
 forced downgrade attacks.
 
+### Roll back an unconfirmed image in dual-boot mode
+
+A dual-boot target that loads the image to RAM (two fixed slots, no swap, `src/update_ram.c`) boots the slot with the higher version and marks it `TESTING` until the application confirms it with `wolfBoot_success_part()`. If the board resets while the slot is still `TESTING`, wolfBoot falls back to the other slot only when that does not lower the version, so an update that boots but never confirms keeps being retried.
+
+`DUALBOOT_ROLLBACK_UNCONFIRMED=1` lets that fallback go to a lower version: the other slot boots, and the unconfirmed slot is erased once that image has passed verification. If the other slot fails verification, the unconfirmed image is kept and booted again. The version check for confirmed images is unchanged. The option is not available with the hardware-assisted swap loader. The trade-off is that someone able to reset the board during the probation window can keep it on the older image, which `ALLOW_DOWNGRADE=0` otherwise prevents once the newer one has been written.
+
 ### Linux kernel command line (bootargs)
 
 On the FIT Linux-boot targets whose DTB comes from the signed FIT (Versal, ZynqMP, PolarFire SoC), a DTB that already carries a non-empty `/chosen/bootargs` keeps it by default - the image boots with the arguments its kernel was validated with, and wolfBoot logs `FDT: using DTB bootargs: ...`. Three macros control this:

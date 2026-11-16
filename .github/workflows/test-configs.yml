@@ -1667,6 +1667,21 @@ jobs:
       arch: aarch64
       config-file: ./config/examples/versal_vmk180_sdcard.config
 
+  # ML-DSA-87 signed, AES-256 encrypted images in two fixed QSPI slots.
+  versal_vmk180_pq_enc_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/versal_vmk180.config
+      make-args: SIGN=ML_DSA ML_DSA_LEVEL=5 IMAGE_SIGNATURE_SIZE=4627 IMAGE_HEADER_SIZE=12288 ENCRYPT=1 ENCRYPT_WITH_AES256=1 CUSTOM_ENCRYPT_KEY=1 ENCRYPT_CACHE=0x08200000 DUALBOOT_ROLLBACK_UNCONFIRMED=1 WOLFBOOT_PARTITION_SIZE=0x400000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0xC00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x1000000
+
+  versal_vmk180_sdcard_pq_enc_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/versal_vmk180_sdcard.config
+      make-args: SIGN=ML_DSA ML_DSA_LEVEL=5 IMAGE_SIGNATURE_SIZE=4627 IMAGE_HEADER_SIZE=12288 ENCRYPT=1 ENCRYPT_WITH_AES256=1 CUSTOM_ENCRYPT_KEY=1 DISK_BOOT_CONFIRM=1 WOLFBOOT_SECTOR_SIZE=0x4000
+
   # FIT read from a filesystem with no kernel load/entry and no fdt
   # sub-image, so the staging addresses come from the build.
   versal_vmk180_sdcard_fit_file_test:
