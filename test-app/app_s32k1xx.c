@@ -107,12 +107,17 @@ static void delay_ms(uint32_t ms)
     }
 }
 
-static void systick_init(void)
+/* 1 ms tick from the core clock running at core_hz */
+static void systick_set(uint32_t core_hz)
 {
-    /* Configure SysTick for 1ms tick */
-    SYST_RVR = (CLOCK_SPEED / 1000) - 1;
+    SYST_RVR = (core_hz / 1000) - 1;
     SYST_CVR = 0;
     SYST_CSR = SYST_CSR_ENABLE | SYST_CSR_TICKINT | SYST_CSR_CLKSOURCE;
+}
+
+static void systick_init(void)
+{
+    systick_set(CLOCK_SPEED);
 }
 
 /* ============== LED Functions ============== */
@@ -889,10 +894,31 @@ static int cmd_update(const char *args)
 }
 
 #ifdef ENABLE_WOLFIP
+/* S32K1XX_HSRUN_SPEED_TEST runs the throughput server in HSRUN at 112 MHz
+ * and returns to RUN at 80 MHz after it, before anything can write flash.
+ * The ENET driver is started inside, so it times itself at 112 MHz. */
+#if defined(S32K1XX_HSRUN_SPEED_TEST) && defined(WOLFIP_SPEED_TEST) && \
+    !defined(WOLFBOOT_TEST_TFTP)
+#ifndef S32K1XX_CLOCK_80MHZ
+#error "S32K1XX_HSRUN_SPEED_TEST needs S32K1XX_CLOCK_80MHZ"
+#endif
+#define NETWORK_TEST_HSRUN
+#endif
+
 static int cmd_network(const char *args)
 {
     (void)args;
+#ifdef NETWORK_TEST_HSRUN
+    if (s32k1xx_clock_hsrun() == 0)
+        systick_set(S32K1XX_HSRUN_CLOCK_SPEED);
+    else
+        printf("HSRUN not allowed, staying at 80 MHz\r\n");
+#endif
     wolfip_tftp_test_report();
+#ifdef NETWORK_TEST_HSRUN
+    s32k1xx_clock_run();
+    systick_set(CLOCK_SPEED);
+#endif
     return 0;
 }
 

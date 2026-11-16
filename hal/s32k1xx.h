@@ -186,9 +186,9 @@
 
 /* SMC - System Mode Controller */
 #define SMC_BASE            (0x4007E000UL)
-#define SMC_PMPROT          (*(volatile uint32_t *)(SMC_BASE + 0x000UL))
-#define SMC_PMCTRL          (*(volatile uint32_t *)(SMC_BASE + 0x004UL))
-#define SMC_PMSTAT          (*(volatile uint32_t *)(SMC_BASE + 0x008UL))
+#define SMC_PMPROT          (*(volatile uint32_t *)(SMC_BASE + 0x008UL))
+#define SMC_PMCTRL          (*(volatile uint32_t *)(SMC_BASE + 0x00CUL))
+#define SMC_PMSTAT          (*(volatile uint32_t *)(SMC_BASE + 0x014UL))
 
 #define SMC_PMPROT_AHSRUN   (1UL << 7)  /* Allow HSRUN */
 #define SMC_PMCTRL_RUNM_SHIFT 5
@@ -693,6 +693,12 @@
  * wolfBoot, which hands over on the SIRC or FIRC. The LPUART keeps its FIRC
  * clock. */
 void s32k1xx_clock_80mhz(void);
+/* Switch between HSRUN at 112 MHz and RUN at 80 MHz. Flash cannot be
+ * programmed or erased in HSRUN. s32k1xx_clock_hsrun() returns -1 if HSRUN
+ * cannot be allowed (SMC_PMPROT already written without AHSRUN). */
+#define S32K1XX_HSRUN_CLOCK_SPEED 112000000UL
+int s32k1xx_clock_hsrun(void);
+void s32k1xx_clock_run(void);
 #endif
 #ifdef S32K1XX_CODE_CACHE
 /* Enable the LMEM code cache for flash. The HAL flash erase and program

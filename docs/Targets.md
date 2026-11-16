@@ -7174,6 +7174,7 @@ The following build options are available for the S32K1xx HAL:
 | `WATCHDOG_TIMEOUT_MS` | Watchdog timeout in milliseconds when `WATCHDOG` is enabled (default: 1000ms). |
 | `S32K1XX_CLOCK_HSRUN` | Enable HSRUN mode (112 MHz). Requires external crystal and SPLL (not fully implemented). |
 | `S32K1XX_CLOCK_80MHZ` | Run wolfBoot at 80 MHz (RUN mode) from the external crystal through the SPLL, instead of the 48 MHz FIRC. The crystal frequency is `S32K1XX_SOSC_FREQ` (default 8 MHz). The clock is switched back before the application starts; the s32k1xx test-app switches to 80 MHz again with `s32k1xx_clock_80mhz()`. Tested on the MCXE247 only. |
+| `S32K1XX_HSRUN_SPEED_TEST` | With `S32K1XX_CLOCK_80MHZ` and the wolfIP speed test, the test-app `network` command runs in HSRUN at 112 MHz (bus 56 MHz, flash 28 MHz) with `s32k1xx_clock_hsrun()` and returns to RUN at 80 MHz with `s32k1xx_clock_run()` when the server stops, so flash writes from the console still work. Tested on the MCXE247 only. |
 | `S32K1XX_CODE_CACHE` | Enable the 4 KB LMEM code cache for flash while wolfBoot runs. It is invalidated after every flash erase and program command, and disabled before the application starts; the s32k1xx test-app enables it again with `s32k1xx_code_cache_enable()`. Tested on the MCXE247 only. |
 | `DEBUG_UART` | Enable LPUART debug output. |
 | `DEBUG_HARDFAULT` | Enable detailed hard fault debugging output. |
@@ -7340,7 +7341,9 @@ with the S32K148 (NXP AN14731), so it uses the bare-metal `s32k1xx` HAL with the
 
 The 2 MB of flash is not contiguous: 1.5 MB of Program Flash is at `0x00000000`
 and the remaining 512 KB is FlexNVM at `0x10000000`. Only the Program Flash is
-used. The system runs at 48 MHz (FIRC). Flash cannot be programmed in HSRUN.
+used. wolfBoot runs at 80 MHz with `mcxe247.config` (48 MHz FIRC without
+`S32K1XX_CLOCK_80MHZ`). Flash cannot be programmed in HSRUN, so only the
+network speed test runs at 112 MHz.
 
 ### NXP MCXE247: Memory Layout
 
@@ -7437,6 +7440,8 @@ it to find the highest rate without loss. Do not raise it above the link rate:
 a fast host (WSL can send 2 Gbit/s) queues the excess and keeps feeding it to
 the board long after the test, so the board stops answering. The board prints
 the same counters on the console after each test.
+`mcxe247.config` sets `S32K1XX_HSRUN_SPEED_TEST`, so the server runs in
+HSRUN at 112 MHz and the console returns to RUN at 80 MHz when it stops.
 Plain `nc <ip> 9` still works as a bidirectional TCP test.
 
 Press Ctrl-C on the console to stop the server and return to the `cmd>` prompt.
