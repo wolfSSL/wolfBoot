@@ -114,12 +114,16 @@ class Pacer:
         self.gap = bits / (rate_mbps * 1e6) if rate_mbps > 0 else 0.0
         self.next = time.perf_counter()
 
-    def wait(self):
+    def wait(self, idle=None):
+        """idle, if given, runs while waiting (at least once per call)."""
+        if idle is not None:
+            idle()
         if self.gap == 0.0:
             return
         self.next += self.gap
         while time.perf_counter() < self.next:
-            pass
+            if idle is not None:
+                idle()
 
 
 def tcp_test(ip, port, mode, secs):
@@ -173,7 +177,18 @@ def udp_test(sock, addr, mode, secs, size, rate):
     last = [None]
     stop_rx = threading.Event()
 
-    def receiver():
+    def count(data):
+        if (len(data) >= HDR.size and data[0] == MAGIC and
+                data[1] == ord("d") and
+                HDR.unpack_from(data)[5] == session):
+            now = time.monotonic()
+            if first[0] is None:
+                first[0] = now
+            last[0] = now
+            got[0] += 1
+            got[1] += len(data)
+
+    def receiver(deadline=None):
         sock.settimeout(0.2)
         idle_limit = 1.0
         while not stop_rx.is_set():
@@ -182,21 +197,22 @@ def udp_test(sock, addr, mode, secs, size, rate):
             except socket.timeout:
                 if last[0] is not None and time.monotonic() - last[0] > idle_limit:
                     break
+                if deadline is not None and time.monotonic() > deadline:
+                    break
                 continue
-            if (len(data) >= HDR.size and data[0] == MAGIC and
-                    data[1] == ord("d") and
-                    HDR.unpack_from(data)[5] == session):
-                now = time.monotonic()
-                if first[0] is None:
-                    first[0] = now
-                last[0] = now
-                got[0] += 1
-                got[1] += len(data)
+            count(data)
+
+    def drain_rx():
+        try:
+            while True:
+                count(sock.recvfrom(2048)[0])
+        except (BlockingIOError, InterruptedError):
+            pass
 
     payload = bytearray(size)
     t0 = time.monotonic()
     rx = None
-    if mode in ("t", "b"):
+    if mode == "t":
         rx = threading.Thread(target=receiver)
         rx.start()
     if mode == "t":
@@ -206,19 +222,28 @@ def udp_test(sock, addr, mode, secs, size, rate):
             sock.sendto(HDR.pack(MAGIC, ord("t"), size, 0, dur_ms, session),
                         addr)
     else:
+        # bidir receives in this thread, between sends: a receiver thread
+        # would wait for the GIL after every recvfrom() while the pacer
+        # spins, and the host would drop most of what the board sends
         cmd = ord(mode)
+        idle = drain_rx if mode == "b" else None
         pacer = Pacer(rate, size)
         stop = t0 + secs
         seq = 0
+        sock.setblocking(False)
         while time.monotonic() < stop:
             HDR.pack_into(payload, 0, MAGIC, cmd, size, seq, dur_ms, session)
             try:
                 sock.sendto(payload, addr)
             except (BlockingIOError, OSError):
+                if idle is not None:
+                    idle()
                 continue
             seq += 1
-            pacer.wait()
+            pacer.wait(idle)
         sent[0] = seq
+        if mode == "b":
+            receiver(time.monotonic() + 5)  # the board's tail
     if rx is not None:
         rx.join(timeout=secs + 5)
         stop_rx.set()
