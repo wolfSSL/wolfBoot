@@ -28,6 +28,12 @@ extern unsigned int _start_bss;
 extern unsigned int _end_bss;
 extern unsigned int _end_stack;
 extern unsigned int _start_heap;
+#ifdef APP_RAMCODE_L
+/* Hot code copied from flash to a second RAM region at reset */
+extern unsigned int _stored_ramcode_l;
+extern unsigned int _start_ramcode_l;
+extern unsigned int _end_ramcode_l;
+#endif
 
 #ifdef TARGET_stm32f4
 extern void isr_tim2(void);
@@ -126,6 +132,15 @@ void isr_reset(void)
         dst++;
         src++;
     }
+#ifdef APP_RAMCODE_L
+    src = (unsigned int *) &_stored_ramcode_l;
+    dst = (unsigned int *) &_start_ramcode_l;
+    while (dst < (unsigned int *)&_end_ramcode_l) {
+        *dst = *src;
+        dst++;
+        src++;
+    }
+#endif
 
     dst = &_start_bss;
     while (dst < (unsigned int *)&_end_bss) {

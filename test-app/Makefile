@@ -1746,6 +1746,8 @@ ifeq ($(ENABLE_WOLFIP),1)
     LSCRIPT_TEMPLATE=ARM-s32k1xx-wolfip.ld
     # Clear all of SRAM_U at reset, before the stack is used (ECC)
     CFLAGS+=-DAPP_RAM_ECC_INIT
+    # Hot code in SRAM_L (.ramcode_l in ARM-s32k1xx-wolfip.ld)
+    CFLAGS+=-DAPP_RAMCODE_L
     # Standalone driver, interrupt driven: startup_arm.c routes ENET IRQs
     # 73-75 to nxp_mcxe_enet_irq_handler()
     CFLAGS+=-DWOLFIP_PORT_MCXE_ENET -DNXP_MCXE_ENET_IRQ=1

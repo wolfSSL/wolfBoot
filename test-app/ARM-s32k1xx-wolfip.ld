@@ -6,6 +6,9 @@
  * buffers) goes in SRAM_L, which the ENET DMA and eDMA reach through its
  * backdoor port. Both are outside the code cache while it is disabled (the
  * default); enabling the cache for SRAM_L would break the DMA coherency.
+ * The hottest code (memcpy and wolfIP's checksum loop) runs from SRAM_L too
+ * (.ramcode_l), so the core fetches it over the code bus while its data
+ * accesses use the system bus.
  *
  * SRAM is ECC protected and holds no valid ECC after power-on. With
  * APP_RAM_ECC_INIT the reset handler clears [_start_ecc_ram, _end_ecc_ram),
@@ -23,6 +26,21 @@ MEMORY
 
 SECTIONS
 {
+    /* Hot code run from SRAM_L, which the core fetches over its code bus in
+     * parallel with its data accesses (code in SRAM_U shares the system bus
+     * with the data). It comes first so that these input sections are taken
+     * before the .text* rule below; its load image follows .edidx in flash
+     * and is copied at reset (APP_RAMCODE_L). */
+    .ramcode_l : AT (_stored_ramcode_l)
+    {
+        . = ALIGN(4);
+        _start_ramcode_l = .;
+        KEEP(*string.o(.ramcode))
+        *wolfip.o(.text.csum_add)
+        . = ALIGN(4);
+        _end_ramcode_l = .;
+    } > RAM_L
+
     .text :
     {
         _start_text = .;
@@ -35,13 +53,21 @@ SECTIONS
         _end_text = .;
     } > FLASH
 
+    .keystore :
+    {
+        . = ALIGN(4);
+        KEEP(*(.keystore*))
+    } > FLASH
+
     .edidx :
     {
         . = ALIGN(4);
         *(.ARM.exidx*)
     } > FLASH
 
-    _stored_data = .;
+    _stored_ramcode_l = ALIGN(4);
+
+    _stored_data = _stored_ramcode_l + SIZEOF(.ramcode_l);
 
     .data : AT (_stored_data)
     {

@@ -7402,7 +7402,10 @@ over the board's Ethernet port. This is optional and needs a wolfIP checkout, wh
 The test app builds it interrupt driven (`NXP_MCXE_ENET_IRQ=1`, with ENET IRQs
 73-75 routed in `test-app/startup_arm.c`). The wolfIP stack state, with 9 KB
 TCP receive and transmit buffers per socket, is placed in SRAM_L by
-`test-app/ARM-s32k1xx-wolfip.ld`; the rest of the app uses SRAM_U. Set
+`test-app/ARM-s32k1xx-wolfip.ld`, together with the hottest code (`memcpy` and
+wolfIP's checksum loop), which the core then fetches over its code bus in
+parallel with data on the system bus. The
+rest of the app uses SRAM_U. Set
 `ENABLE_WOLFIP=1` in
 `mcxe247.config` and check the wolfIP path:
 
