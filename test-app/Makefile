@@ -1748,23 +1748,16 @@ ifeq ($(ENABLE_WOLFIP),1)
     CFLAGS+=-DAPP_RAM_ECC_INIT
     # Hot code in SRAM_L (.ramcode_l in ARM-s32k1xx-wolfip.ld)
     CFLAGS+=-DAPP_RAMCODE_L
-    # Standalone driver, interrupt driven: startup_arm.c routes ENET IRQs
-    # 73-75 to nxp_mcxe_enet_irq_handler()
     CFLAGS+=-DWOLFIP_PORT_MCXE_ENET -DNXP_MCXE_ENET_IRQ=1
-    # The TFTP receive buffer shares the 124KB of SRAM_U
     CFLAGS+=-DTFTP_RAM_MAX=0xA000U
     # wolfIP state is in the 128KB of SRAM_L (ARM-s32k1xx-wolfip.ld): six
     # full segments of TCP buffering per socket
     CFLAGS+=-DRXBUF_SIZE=9216 -DTXBUF_SIZE=9216
-    # Build wolfIP hosted: -ffreestanding turns every small fixed-size
-    # memcpy (checksum words, header fields) into a call to the byte-wise
-    # memcpy in src/string.c, which cost most of the stack's CPU time
-    WOLFIP_CFLAGS_OUT:=-ffreestanding
-    # The stack is CPU bound: -O2 (after the global -Os) is 10-18% faster for
-    # 12KB more flash. Take at most 8 frames per wolfIP_poll() so the app can
-    # drain a socket between batches; with the default 128 a line-rate UDP
-    # flood fills the 6-datagram socket buffer and most frames are processed
-    # only to be dropped
+    # remove -ffreestanding so small memcpy's can be inlined
+    WOLFIP_CFLAGS_FILTEROUT:=-ffreestanding
+    # -O2 for some network objects is 10-18% faster.
+    # Take at most 8 frames per wolfIP_poll() so the app can drain a socket
+    # between batches.
     WOLFIP_CFLAGS_ADD:=-O2 -DWOLFIP_POLL_BUDGET=8
     # Driver cycle counters for the throughput test's CPU breakdown
     ifeq ($(WOLFIP_SPEED_TEST),1)
@@ -1799,7 +1792,7 @@ ifeq ($(ENABLE_WOLFIP),1)
   # wolfIP TUs need the port headers first (so config.h resolves to the
   # port copy) and tolerate wolfIP's own style; drop -Werror/-Wstack-usage.
   WOLFIP_CFLAGS:=-I"$(WOLFIP_PORTDIR)" -I"$(WOLFBOOT_LIB_WOLFIP)" \
-    $(filter-out -Werror -Wstack-usage=$(STACK_USAGE_LIMIT) $(WOLFIP_CFLAGS_OUT),$(CFLAGS)) \
+    $(filter-out -Werror -Wstack-usage=$(STACK_USAGE_LIMIT) $(WOLFIP_CFLAGS_FILTEROUT),$(CFLAGS)) \
     -DWOLFIP_ENABLE_TFTP=$(if $(filter 1,$(WOLFBOOT_TEST_TFTP)),1,0) \
     -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers $(WOLFIP_CFLAGS_ADD)
 endif

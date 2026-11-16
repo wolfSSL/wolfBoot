@@ -302,12 +302,21 @@ size_t strlen(const char *s)
 /* A 32-bit word at any address. aligned(1) lets the compiler emit a plain
  * (unaligned) word access; may_alias lets it alias the byte buffers. */
 typedef uint32_t __attribute__((aligned(1), may_alias)) wb_u32_unaligned;
+/* An aligned 32-bit word that may alias the byte buffers */
+typedef uint32_t __attribute__((may_alias)) wb_u32_alias;
 #endif
 void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 {
     size_t i;
     const char *s = (const char *)src;
     char *d = (char *)dst;
+#if defined(FAST_MEMCPY) && defined(__ARM_FEATURE_UNALIGNED) && \
+    defined(__GNUC__)
+    const wb_u32_unaligned *sw;
+    wb_u32_alias *dw;
+    uint32_t w0, w1, w2, w3;
+    size_t blocks;
+#endif
 
 #if defined(FAST_MEMCPY) && defined(__ARM_FEATURE_UNALIGNED) && \
     defined(__GNUC__)
@@ -321,26 +330,26 @@ void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
             *d++ = *s++;
             n--;
         }
-        while (n >= 4 * sizeof(uint32_t)) {
-            uint32_t w0 = ((const wb_u32_unaligned *)s)[0];
-            uint32_t w1 = ((const wb_u32_unaligned *)s)[1];
-            uint32_t w2 = ((const wb_u32_unaligned *)s)[2];
-            uint32_t w3 = ((const wb_u32_unaligned *)s)[3];
-
-            ((wb_u32_unaligned *)d)[0] = w0;
-            ((wb_u32_unaligned *)d)[1] = w1;
-            ((wb_u32_unaligned *)d)[2] = w2;
-            ((wb_u32_unaligned *)d)[3] = w3;
-            d += 4 * sizeof(uint32_t);
-            s += 4 * sizeof(uint32_t);
-            n -= 4 * sizeof(uint32_t);
+        sw = (const wb_u32_unaligned *)s;
+        dw = (wb_u32_alias *)d;
+        /* 16 bytes per pass with post-incremented pointers */
+        for (blocks = n / (4 * sizeof(uint32_t)); blocks > 0; blocks--) {
+            w0 = *sw++;
+            w1 = *sw++;
+            w2 = *sw++;
+            w3 = *sw++;
+            *dw++ = w0;
+            *dw++ = w1;
+            *dw++ = w2;
+            *dw++ = w3;
         }
-        while (n >= sizeof(uint32_t)) {
-            *(wb_u32_unaligned *)d = *(const wb_u32_unaligned *)s;
-            d += sizeof(uint32_t);
-            s += sizeof(uint32_t);
-            n -= sizeof(uint32_t);
+        n %= 4 * sizeof(uint32_t);
+        for (blocks = n / sizeof(uint32_t); blocks > 0; blocks--) {
+            *dw++ = *sw++;
         }
+        n %= sizeof(uint32_t);
+        s = (const char *)sw;
+        d = (char *)dw;
     }
 #elif defined(FAST_MEMCPY)
     /* is 32-bit aligned pointer */

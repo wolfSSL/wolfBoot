@@ -7278,7 +7278,11 @@ The S32K1xx test application (`test-app/app_s32k1xx.c`) provides a feature-rich 
 | `trigger` | Set update flag if update image is in flash |
 | `update` | Receive firmware via XMODEM and trigger update |
 | `timestamp` | Show current system time (ms) |
+| `network` | Run the wolfIP network test |
 | `reboot` | Perform software reset |
+
+Note: `network` requires `ENABLE_WOLFIP=1` and, optionally, `WOLFIP_SPEED_TEST=1`
+or `WOLFBOOT_TEST_TFTP=1`.
 
 **UART Configuration:**
 - LPUART1: PTC7 (TX), PTC6 (RX)
