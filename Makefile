@@ -493,6 +493,12 @@ ifeq ($(TARGET),tegra234)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+# Versal Gen 2 runs from RAM (BL33 at 0x40000000, loaded by the PLM), so
+# there is no flat flash image to assemble into a factory.bin.
+ifeq ($(TARGET),versal2)
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 # i.MX95 A55 is a RAM-resident BL33 loaded by SPL inside an AHAB container, so
 # there is no contiguous flash image to assemble into a factory.bin.
 ifeq ($(TARGET),imx95_a55)

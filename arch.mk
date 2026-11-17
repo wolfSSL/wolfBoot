@@ -249,6 +249,26 @@ ifeq ($(ARCH),AARCH64)
     SPI_TARGET=nxp
   endif
 
+  ifeq ($(TARGET),versal2)
+    # AMD Versal AI Edge / Prime Gen 2 (VEK385) - Cortex-A78AE
+    # A/B boot over OSPI (Cadence) flash. The board (devices, drivers) is a
+    # wolfHAL board: WOLFHAL=1 BOARD=vek385, see hal/boards/vek385.
+    ARCH_FLAGS=-mcpu=cortex-a78+crypto -march=armv8.2-a+crypto
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A78
+    CFLAGS+=-DWOLFBOOT_DUALBOOT
+    ifneq ($(WOLFHAL),1)
+      $(error TARGET=versal2 needs WOLFHAL=1 and BOARD, e.g. BOARD=vek385)
+    endif
+    # Support detection and skip of U-Boot legacy header
+    CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+    # The PLM owns RVBAR on Versal Gen 2, so don't write it
+    CFLAGS+=-DSKIP_RVBAR=1
+    # aarch64-linux-gnu-gcc builds PIE by default. wolfBoot must be a
+    # static image at a fixed address (WOLFBOOT_ORIGIN).
+    CFLAGS+=-fno-pic -fno-pie
+    LDFLAGS+=-static -no-pie -Wl,--build-id=none
+  endif
+
   ifeq ($(TARGET),tegra234)
     # NVIDIA Jetson Orin (Tegra234, Cortex-A78AE): bare-metal wolfBoot as the
     # BL33 firmware stage. The UEFI-application alternative is the aarch64_efi
@@ -447,7 +467,7 @@ ifeq ($(ARCH),AARCH64)
   # asm (sp_arm64.c / WOLFSSL_SP_ARM64_ASM); that is enabled independently on
   # __aarch64__ in include/user_settings.h, so a non-FIPS cm4 build still links
   # sp_arm64 asm.
-  ifeq ($(filter zynq versal agilex5 nxp_ls1028a imx95_a55,$(TARGET)),)
+  ifeq ($(filter zynq versal versal2 agilex5 nxp_ls1028a imx95_a55,$(TARGET)),)
     NO_ARM_ASM?=1
   endif
 

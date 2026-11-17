@@ -82,6 +82,7 @@ This README describes configuration of supported targets.
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
 * [Xilinx Zynq-7000 (ZC702)](#xilinx-zynq-7000-zc702)
 * [Versal Gen 1 VMK180](#versal-gen-1-vmk180)
+* [Versal Gen 2 VEK385](#versal-gen-2-vek385)
 
 ## STM32F4
 
@@ -5010,6 +5011,60 @@ sudo fdisk -l /dev/sdX
 | QSPI32    | 0 0 1 0       | on, on, off, on |
 | SD1       | 1 1 1 0       | off, off, off, on |
 
+
+## Versal Gen 2 VEK385
+
+AMD Versal AI Edge / Prime Gen 2 (VEK385) evaluation kit, Cortex-A78AE.
+`TARGET=versal2` is a wolfHAL board (`WOLFHAL=1 BOARD=vek385`, see
+[wolfHAL Integration](wolfHAL.md)): the UART and OSPI flash drivers come
+from `lib/wolfHAL`. Tested on a VEK385 Rev B with Vitis 2026.1.
+
+wolfBoot replaces U-Boot in the Versal boot flow and runs from DDR at
+`0x40000000`:
+
+```
+PLM -> BL31 (EL3) -> wolfBoot (EL2) -> application or Linux (EL2)
+```
+
+It verifies the signed images in the OSPI flash and boots the one with the
+higher version, from BOOT or UPDATE, in place (A/B). The application starts
+at EL2; build with `BOOT_EL1=1` to start it at EL1. Linux on the board must
+stay at EL2.
+
+### Flash layout
+
+Micron MT35XU02G, 256 MB, on the OSPI interface:
+
+| Partition | Size   | Address | Description |
+|-----------|--------|---------|-------------|
+| BOOT.BIN  | 8 MB   | 0x15C0000 | boot image slot at the start of Bank A |
+| BOOT      | 44 MB  | 0x1DC0000 | Boot partition |
+| UPDATE    | 44 MB  | 0x49C0000 | Update partition |
+| DTS boot  | 1 MB   | 0x7600000 | standalone DTB slot |
+| DTS update| 1 MB   | 0x7E00000 | standalone DTB slot |
+| SWAP      | 128 KB | 0xFA40000 | reserved; not used in this boot mode |
+
+wolfBoot only programs and erases inside BOOT, UPDATE and SWAP
+(`hal/wolfhal.c`). It never writes the rest of the flash.
+
+### Build
+
+```sh
+git submodule update --init
+cp config/examples/versal2_vek385.config .config
+make clean TARGET=versal2
+make TARGET=versal2
+```
+
+This makes `wolfboot.elf` and the signed test app
+`test-app/image_v1_signed.bin`. Use
+`config/examples/versal2_vek385_linux.config` to boot Linux.
+
+### Not yet supported
+
+- XIP, the indirect OSPI write path and the system watchdog.
+- wolfHAL timeouts: the board is built with `WHAL_CFG_NO_TIMEOUT`, so a
+  flash or UART that never answers makes wolfBoot hang.
 
 ## Infineon PSoC 6
 
