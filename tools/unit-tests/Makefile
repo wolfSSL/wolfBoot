@@ -22,6 +22,7 @@ WOLFBOOT_LIB_WOLFPSA?=../../lib/wolfPSA
 WOLFBOOT_LIB_WOLFTPM?=../../lib/wolfTPM
 WOLFBOOT_LIB_WOLFHSM?=../../lib/wolfHSM
 WOLFBOOT_LIB_WOLFCOSE?=../../lib/wolfCOSE
+WOLFBOOT_LIB_WOLFHAL?=../../lib/wolfHAL
 
 ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFPSA)),)
 WOLFBOOT_LIB_WOLFPSA=../../../external-libs/wolfPSA
@@ -35,6 +36,9 @@ endif
 ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFCOSE)),)
 WOLFBOOT_LIB_WOLFCOSE=../../../external-libs/wolfCOSE
 endif
+ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFHAL)),)
+WOLFBOOT_LIB_WOLFHAL=../../../external-libs/wolfHAL
+endif
 
 # Convert to absolute paths for standalone usage
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
@@ -43,6 +47,7 @@ WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
 WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
 WOLFBOOT_LIB_WOLFHSM:=$(abspath $(WOLFBOOT_LIB_WOLFHSM))
 WOLFBOOT_LIB_WOLFCOSE:=$(abspath $(WOLFBOOT_LIB_WOLFCOSE))
+WOLFBOOT_LIB_WOLFHAL:=$(abspath $(WOLFBOOT_LIB_WOLFHAL))
 
 CFLAGS=-I. -I../../src -I../../include -I$(WOLFBOOT_LIB_WOLFSSL)
 CFLAGS+=-g -ggdb
@@ -173,6 +178,11 @@ TESTS+=unit-imx95-disk
 TESTS+=unit-versal-ext-write
 TESTS+=unit-versal-wdt
 TESTS+=unit-versal-uart-rx
+TESTS+=unit-wolfhal-ext-flash
+TESTS+=unit-wolfhal-ext-flash-intboot
+TESTS+=unit-wolfhal-ext-flash-intswap
+TESTS+=unit-wolfhal-uart-flash
+TESTS+=unit-wolfhal-uart-flash-intflash
 TESTS+=unit-raspi3-uart-rx
 TESTS+=unit-mpfs-wdt
 TESTS+=unit-t10xx-qe-firmware
@@ -2006,6 +2016,56 @@ versal_uart_rx_extract.h: ../../hal/versal.c
 
 unit-versal-uart-rx: unit-versal-uart-rx.c versal_uart_rx_extract.h versal_host.h
 	gcc -o $@ unit-versal-uart-rx.c -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
+
+# unit-wolfhal-ext-flash copies the ext_flash code of hal/wolfhal.c (the
+# partition guard and the ext_flash_* glue) and runs it on a mock wolfHAL
+# flash device. The wolfHAL drivers below it are tested in wolfHAL
+# (lib/wolfHAL/tests).
+wolfhal_ext_flash_extract.h: ../../hal/wolfhal.c
+	sed -n '/^#ifdef EXT_FLASH/,/^#endif \/\* EXT_FLASH/p' $< > $@
+	test -s $@
+
+unit-wolfhal-ext-flash: unit-wolfhal-ext-flash.c wolfhal_ext_flash_extract.h
+	gcc -o $@ unit-wolfhal-ext-flash.c \
+	  $(WOLFBOOT_LIB_WOLFHAL)/src/flash/flash.c \
+	  -I$(WOLFBOOT_LIB_WOLFHAL) $(CFLAGS) $(LDFLAGS)
+
+# The same test for a board with BOOT in internal flash (no PART_BOOT_EXT).
+unit-wolfhal-ext-flash-intboot: unit-wolfhal-ext-flash.c \
+    wolfhal_ext_flash_extract.h
+	gcc -o $@ unit-wolfhal-ext-flash.c \
+	  $(WOLFBOOT_LIB_WOLFHAL)/src/flash/flash.c \
+	  -I$(WOLFBOOT_LIB_WOLFHAL) -DUNIT_BOOT_INTERNAL $(CFLAGS) $(LDFLAGS)
+
+# The same test for a board with SWAP in internal flash (NO_SWAP_EXT=1).
+unit-wolfhal-ext-flash-intswap: unit-wolfhal-ext-flash.c \
+    wolfhal_ext_flash_extract.h
+	gcc -o $@ unit-wolfhal-ext-flash.c \
+	  $(WOLFBOOT_LIB_WOLFHAL)/src/flash/flash.c \
+	  -I$(WOLFBOOT_LIB_WOLFHAL) -DUNIT_SWAP_INTERNAL $(CFLAGS) $(LDFLAGS)
+
+# unit-wolfhal-uart-flash copies uart_write and the internal flash calls
+# of hal/wolfhal.c and runs them on mock wolfHAL devices, as on the
+# VEK385: '\n' sent as "\r\n", no internal flash.
+wolfhal_uart_flash_extract.h: ../../hal/wolfhal.c
+	sed -n -e '/^#ifdef BOARD_FLASH_DEV/,/^#endif \/\* BOARD_FLASH_DEV/p' \
+	  -e '/^#ifdef DEBUG_UART/,/^#endif \/\* DEBUG_UART/p' $< > $@
+	test -s $@
+
+unit-wolfhal-uart-flash: unit-wolfhal-uart-flash.c \
+    wolfhal_uart_flash_extract.h
+	gcc -o $@ unit-wolfhal-uart-flash.c \
+	  $(WOLFBOOT_LIB_WOLFHAL)/src/uart/uart.c \
+	  $(WOLFBOOT_LIB_WOLFHAL)/src/flash/flash.c \
+	  -I$(WOLFBOOT_LIB_WOLFHAL) $(CFLAGS) $(LDFLAGS)
+
+# The same test for a board with internal flash and a plain uart_write.
+unit-wolfhal-uart-flash-intflash: unit-wolfhal-uart-flash.c \
+    wolfhal_uart_flash_extract.h
+	gcc -o $@ unit-wolfhal-uart-flash.c \
+	  $(WOLFBOOT_LIB_WOLFHAL)/src/uart/uart.c \
+	  $(WOLFBOOT_LIB_WOLFHAL)/src/flash/flash.c \
+	  -I$(WOLFBOOT_LIB_WOLFHAL) -DUNIT_INTERNAL_FLASH $(CFLAGS) $(LDFLAGS)
 
 # unit-raspi3-uart-rx runs the real uart_rx() from hal/raspi3.c, the
 # other PL011 console in the tree, against an emulated register block.
