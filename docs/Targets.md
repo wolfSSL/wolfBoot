@@ -7446,7 +7446,9 @@ the board long after the test, so the board stops answering. The board prints
 the same counters on the console after each test.
 `mcxe247.config` sets `S32K1XX_HSRUN_SPEED_TEST`, so the server runs in
 HSRUN at 112 MHz and the console returns to RUN at 80 MHz when it stops.
-Plain `nc <ip> 9` still works as a bidirectional TCP test.
+Plain `nc <ip> 9` still works as a bidirectional TCP test; if `nc` sends
+nothing, the board starts sending 0.5 s after it connects. TCP clients are
+refused while a UDP test runs.
 
 Press Ctrl-C on the console to stop the server and return to the `cmd>` prompt.
 

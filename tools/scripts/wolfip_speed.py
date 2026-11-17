@@ -21,6 +21,7 @@ Standard library only; runs on Linux, macOS and Windows.
 
 import argparse
 import random
+import select
 import socket
 import struct
 import sys
@@ -129,10 +130,9 @@ class Pacer:
 def tcp_test(ip, port, mode, secs):
     """Returns (host bytes sent, host bytes received, host seconds)."""
     s = socket.create_connection((ip, port), timeout=5)
-    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    s.sendall(mode.encode())
     sent = [0]
     recvd = [0]
+    errors = []
     stop = time.monotonic() + secs
     buf = bytes(65536)
 
@@ -142,28 +142,39 @@ def tcp_test(ip, port, mode, secs):
             sent[0] += len(buf)
 
     def receiver():
-        s.settimeout(0.5)
+        # select() rather than a socket timeout, which the sender shares
         while time.monotonic() < stop:
-            try:
-                n = len(s.recv(65536))
-            except socket.timeout:
+            if not select.select([s], [], [], 0.5)[0]:
                 continue
+            n = len(s.recv(65536))
             if n == 0:
-                break
+                raise RuntimeError("the board closed the connection")
             recvd[0] += n
 
-    t0 = time.monotonic()
-    workers = []
-    if mode in ("r", "b"):
-        workers.append(threading.Thread(target=sender))
-    if mode in ("t", "b"):
-        workers.append(threading.Thread(target=receiver))
-    for w in workers:
-        w.start()
-    for w in workers:
-        w.join()
-    elapsed = time.monotonic() - t0
-    s.close()
+    def worker(fn):
+        try:
+            fn()
+        except (OSError, RuntimeError) as e:
+            errors.append(e)
+
+    try:
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        s.sendall(mode.encode())
+        t0 = time.monotonic()
+        workers = []
+        if mode in ("r", "b"):
+            workers.append(threading.Thread(target=worker, args=(sender,)))
+        if mode in ("t", "b"):
+            workers.append(threading.Thread(target=worker, args=(receiver,)))
+        for w in workers:
+            w.start()
+        for w in workers:
+            w.join()
+        elapsed = time.monotonic() - t0
+    finally:
+        s.close()
+    if errors:
+        raise errors[0]
     return sent[0], recvd[0], elapsed
 
 
@@ -258,6 +269,10 @@ def run_test(name, args):
     addr = (args.ip, args.port)
     ctl = udp_socket()
     try:
+        # End any UDP test left running, so this one starts fresh (the
+        # board refuses TCP clients while a UDP test runs)
+        ctl.sendto(HDR.pack(MAGIC, ord("q"), 0, 0, 0, 0), addr)
+        time.sleep(0.3)
         drain(ctl)
         if proto == "tcp":
             h_sent, h_recv, h_secs = tcp_test(args.ip, args.port, mode, args.time)
@@ -265,10 +280,6 @@ def run_test(name, args):
             host_tx = mbps(h_recv, h_secs)
             loss_rx = loss_tx = None
         else:
-            # End any UDP test left running, so this one starts fresh
-            ctl.sendto(HDR.pack(MAGIC, ord("q"), 0, 0, 0, 0), addr)
-            time.sleep(0.3)
-            drain(ctl)
             sent, got, got_bytes, span = udp_test(ctl, addr, mode, args.time,
                                                   args.size, args.rate)
             st = query(ctl, addr, 2)

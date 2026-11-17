@@ -448,8 +448,10 @@ out:
  * bidir = both at once.
  *
  * TCP: the first byte the client sends picks the direction: 'r' rx,
- * 't' tx, anything else bidir (so plain "nc <ip> 9" stays bidirectional).
- * The test ends when the client closes.
+ * 't' tx, anything else bidir. A client that sends nothing for
+ * SPEED_TCP_MODE_MS gets bidir, so plain "nc <ip> 9" works whether or not
+ * it sends. The test ends when the client closes. TCP clients are refused
+ * while a UDP test runs.
  *
  * UDP: each datagram starts with a SPEED_HDR_LEN byte header, big-endian:
  *   [0] SPEED_MAGIC  [1] command  [2..3] board datagram size
@@ -460,7 +462,8 @@ out:
  * Commands to the board:
  *   'r'  data to count (starts an rx test)
  *   'b'  data to count; the first one starts a bidir test and the board
- *        sends to the client for the given duration
+ *        sends to the client for the given duration, which also ends
+ *        the test
  *   't'  start a tx test: the board sends to the client for the duration
  *   'q'  end the current UDP test and reply with an 'S' stats datagram
  * The board's own datagrams carry command 'd'.
@@ -477,6 +480,9 @@ out:
 #define SPEED_PROTO_TCP     1U
 #define SPEED_PROTO_UDP     2U
 #define SPEED_REPLY_LEN     108
+/* A TCP client that sends no direction byte this long after it connects
+ * gets a bidir test */
+#define SPEED_TCP_MODE_MS   500U
 
 /* How often the server checks for Ctrl-C on the console */
 #define SPEED_ABORT_POLL_MS 100U
@@ -695,7 +701,8 @@ static void speed_cb(int fd, uint16_t event, void *arg)
         if ((event & CB_EVENT_READABLE) != 0U) {
             c = wolfIP_sock_accept(s, speed_listen_fd, NULL, NULL);
             if (c >= 0) {
-                if (speed_client_fd >= 0) {
+                if (speed_client_fd >= 0 || speed.active != 0U) {
+                    /* one test at a time, TCP or UDP */
                     (void)wolfIP_sock_close(s, c);
                 }
                 else {
@@ -714,7 +721,7 @@ static void speed_cb(int fd, uint16_t event, void *arg)
     }
 }
 
-static void speed_tcp_pump(struct wolfIP *s)
+static void speed_tcp_pump(struct wolfIP *s, uint64_t now)
 {
     int n;
     int k;
@@ -737,6 +744,8 @@ static void speed_tcp_pump(struct wolfIP *s)
         }
         speed.rx_bytes += (uint32_t)n;
     }
+    if (speed.mode == 0U && now >= speed.start_ms + SPEED_TCP_MODE_MS)
+        speed.mode = 'b';
     if (speed.mode != 't' && speed.mode != 'b')
         return;
     for (k = 0; k < SPEED_BURST; k++) {
@@ -811,9 +820,10 @@ static void speed_udp_send(struct wolfIP *s, uint64_t now)
     if (speed.streaming == 0U)
         return;
     if (now >= speed.stream_end_ms) {
-        speed.streaming = 0U;
-        if (speed.mode == 't')
-            speed_stop(now);
+        /* The host sends for the same duration, from slightly earlier, so
+         * a bidir test ends here too: its window then holds no idle tail
+         * while the host collects the last datagrams before 'q'. */
+        speed_stop(now);
         return;
     }
     speed_txbuf[0] = SPEED_MAGIC;
@@ -903,7 +913,7 @@ static int run_speed_server(struct wolfIP *s)
         }
         c_poll = SPEED_CYCLES();
         (void)wolfIP_poll(s, now);
-        speed_tcp_pump(s);
+        speed_tcp_pump(s, now);
         speed_udp_recv(s, now);
         speed_udp_send(s, now);
         c_done = SPEED_CYCLES();
