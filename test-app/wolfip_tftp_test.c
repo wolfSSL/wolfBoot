@@ -42,6 +42,7 @@
 /* Port selection:
  *   WOLFIP_PORT_ENETC -> LS1028A ENETC
  *   WOLFIP_PORT_MCXE_ENET -> MCXE247 ENET
+ *   WOLFIP_PORT_MCXE31B_EMAC -> MCXE31B EMAC
  *   else QorIQ FMan
  * Driver entry points are wrapped so the bring-up code below is port-agnostic. */
 #if defined(WOLFIP_PORT_ENETC)
@@ -59,6 +60,23 @@
 #define WOLFIP_NETDEV_PHY_READ  nxp_mcxe_enet_phy_read
 #define WOLFIP_NETDEV_LINK_UP   nxp_mcxe_enet_link_up
 #define WOLFIP_NETDEV_NAME      "MCXE247 ENET"
+#if NXP_MCXE_ENET_STATS
+#define WOLFIP_NETDEV_STATS     struct nxp_mcxe_enet_stats
+#define WOLFIP_NETDEV_STATS_GET nxp_mcxe_enet_stats_get
+#define WOLFIP_NETDEV_STATS_RESET nxp_mcxe_enet_stats_reset
+#endif
+#elif defined(WOLFIP_PORT_MCXE31B_EMAC)
+#include "nxp_mcxe31b_emac.h"
+#define WOLFIP_NETDEV_INIT      nxp_mcxe31b_emac_init
+#define WOLFIP_NETDEV_PHY_ADDR  nxp_mcxe31b_emac_phy_addr
+#define WOLFIP_NETDEV_PHY_READ  nxp_mcxe31b_emac_phy_read
+#define WOLFIP_NETDEV_LINK_UP   nxp_mcxe31b_emac_link_up
+#define WOLFIP_NETDEV_NAME      "MCXE31B EMAC"
+#if NXP_MCXE31B_EMAC_STATS
+#define WOLFIP_NETDEV_STATS     struct nxp_mcxe31b_emac_stats
+#define WOLFIP_NETDEV_STATS_GET nxp_mcxe31b_emac_stats_get
+#define WOLFIP_NETDEV_STATS_RESET nxp_mcxe31b_emac_stats_reset
+#endif
 #else
 #include "nxp_fman.h"
 #define WOLFIP_NETDEV_INIT      nxp_fman_init
@@ -113,7 +131,7 @@ static uint64_t now_ms(void)
 {
     return read_tb() / (tb_hz() / 1000ULL);
 }
-#elif defined(WOLFIP_PORT_MCXE_ENET)
+#elif defined(WOLFIP_TEST_APP_TIMEBASE)
 /* 1 ms SysTick count, kept by the target app. */
 #define SYST_CVR_REG    (*(volatile uint32_t *)0xE000E018UL)
 
@@ -486,13 +504,13 @@ out:
 
 /* How often the server checks for Ctrl-C on the console */
 #define SPEED_ABORT_POLL_MS 100U
-#ifdef WOLFIP_PORT_MCXE_ENET
+#ifdef WOLFIP_TEST_APP_TIMEBASE
 #define SPEED_ABORT()       wolfip_test_abort()
 #else
 #define SPEED_ABORT()       0
 #endif
 
-#if defined(WOLFIP_PORT_MCXE_ENET) && NXP_MCXE_ENET_STATS
+#ifdef WOLFIP_NETDEV_STATS
 /* The driver enables the DWT cycle counter */
 #define SPEED_PROFILE       1
 #define SPEED_CYCLES()      (*(volatile uint32_t *)0xE0001004UL)
@@ -530,7 +548,7 @@ static struct wolfIP_sockaddr_in speed_peer;
 static uint8_t speed_rxbuf[SPEED_UDP_MAX];
 static uint8_t speed_txbuf[SPEED_UDP_MAX];
 #if SPEED_PROFILE
-static struct nxp_mcxe_enet_stats speed_drv;
+static WOLFIP_NETDEV_STATS speed_drv;
 #endif
 
 static void speed_put32(uint8_t *p, uint32_t v)
@@ -635,7 +653,7 @@ static void speed_start(uint8_t proto, uint8_t mode, uint64_t now)
     speed.start_ms = now;
     speed.active = 1U;
 #if SPEED_PROFILE
-    nxp_mcxe_enet_stats_reset();
+    WOLFIP_NETDEV_STATS_RESET();
 #endif
 }
 
@@ -648,7 +666,7 @@ static void speed_stop(uint64_t now)
     speed.end_ms = now;
     speed_ended_session = speed.session;
 #if SPEED_PROFILE
-    nxp_mcxe_enet_stats_get(&speed_drv);
+    WOLFIP_NETDEV_STATS_GET(&speed_drv);
 #endif
     speed_print();
 }
@@ -677,7 +695,7 @@ static void speed_reply(struct wolfIP *s, const struct wolfIP_sockaddr_in *to,
     speed_put32(r + 104, speed.polls);
 #if SPEED_PROFILE
     if (speed.active != 0U)
-        nxp_mcxe_enet_stats_get(&speed_drv);
+        WOLFIP_NETDEV_STATS_GET(&speed_drv);
     speed_put32(r + 12, speed_drv.core_hz);
     speed_put32(r + 24, speed_drv.rx_frames);
     speed_put32(r + 28, speed_drv.tx_frames);

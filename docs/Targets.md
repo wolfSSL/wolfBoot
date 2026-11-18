@@ -7517,6 +7517,13 @@ board.
 - The I-cache and D-cache are on while wolfBoot runs; flash program and erase
   invalidate the D-cache over the modified range. Both caches are cleaned and
   turned off before the jump to the application. The clocks stay at 160 MHz.
+- `mcxe31b.config` sets `IMAGE_HEADER_SIZE=1024`, so the application starts
+  1 KB into the boot partition. The application's vector table is used in
+  place, and with up to 163 entries it must be 1 KB aligned: with the default
+  256-byte header the core fetches the vectors of some interrupts (the EMAC,
+  IRQ 105, among them) from the wrong slots.
+- `mcxe31b.config` sets `FAST_MEMCPY`, the word-at-a-time `memcpy` and
+  `memset` of `src/string.c`, for wolfBoot and the test application.
 
 ### NXP MCXE31B: Memory Layout
 
@@ -7554,6 +7561,50 @@ for later versions, and has the same console as the
 | `NVM_FLASH_WRITEONCE` | **Required.** A 64-bit ECC segment can be programmed once between erases, so trailer updates erase and rewrite the sector. |
 | `RAM_CODE` | **Required.** The flash program and erase routines run from DTCM, so the block being written is not read. The linker script checks this. |
 | `DEBUG_UART` | Console output on LPUART5 (MCU-Link VCOM). |
+
+### NXP MCXE31B: Network test
+
+The test application can run a wolfIP throughput test or a DHCP and TFTP test
+over the board's Ethernet port (RMII to a LAN8741A PHY, 50 MHz reference clock
+from the board oscillator). This is optional and needs a wolfIP checkout, whose
+`nxp_mcxe31b_emac` port is a standalone driver for the EMAC (Synopsys Ethernet
+QoS), its clocks and pins, and the PHY (no vendor SDK). The test app builds it
+interrupt driven (`NXP_MCXE31B_EMAC_IRQ=1`, EMAC IRQ 105 routed in
+`test-app/startup_arm.c`); `NXP_MCXE31B_EMAC_IRQ=0` makes it poll the EMAC
+instead. `test-app/ARM-mcxe31b-wolfip.ld` keeps the driver's descriptor rings
+and frame buffers in the DTCM, which the core does not cache and the EMAC DMA
+reaches through its backdoor port, and places the wolfIP stack state, with
+9 KB TCP receive and transmit buffers per socket, and the TFTP receive buffer
+in SRAM. SRAM is ECC protected: the reset handler clears all 320 KB of it
+with 64-bit stores (`APP_RAM_ECC_INIT`) before it is used. Set
+`ENABLE_WOLFIP=1` in `mcxe31b.config` and check the wolfIP path:
+
+```sh
+ENABLE_WOLFIP?=1
+WOLFBOOT_LIB_WOLFIP?=../lib/wolfip
+NXP_MCXE31B_EMAC_IRQ?=1
+WOLFIP_SPEED_TEST?=1
+WOLFBOOT_TEST_TFTP?=0
+```
+
+Type `network` on the console to run the test. It works the same way as the
+[MCXE247 network test](#nxp-mcxe247-network-test): by default it acquires a
+DHCP lease and runs a TCP and UDP throughput server on port 9, driven from a
+PC on the same network with `python3 tools/scripts/wolfip_speed.py <ip>`.
+Ctrl-C on the console stops the server. Measured on the FRDM-MCXE31B at
+160 MHz, 100 Mbit/s full duplex, interrupt driven, 10 s per test:
+
+| Test | Board receives | Board sends |
+|------|----------------|-------------|
+| TCP, one direction | 92.3 Mbit/s | 72.5 Mbit/s |
+| TCP, both directions | 38.2 Mbit/s | 30.6 Mbit/s |
+| UDP, one direction | 95.7 Mbit/s (no loss) | 78.5 Mbit/s |
+| UDP, both directions | 71.8 Mbit/s | 71.8 Mbit/s |
+
+With `WOLFBOOT_TEST_TFTP=1` the command fetches `TFTP_FILENAME` from
+`HOST_IP_STR` instead (128 KB at most) and prints its size and checksum
+followed by `WOLFIP_TEST: PASS` or `WOLFIP_TEST: FAIL`. Both the interrupt
+driven and the polled build pass this test.
 
 ### NXP MCXE31B: Programming with Lauterbach TRACE32
 
@@ -7593,9 +7644,10 @@ Tested on the FRDM-MCXE31B:
 
 1. Program `factory.bin` with `e31b_flash_factory_bin.cmm`. wolfBoot boots
    version 1 and the RGB LED is green.
-2. Sign version 2 and program it with `e31b_flash_update.cmm`:
+2. Sign version 2 with the configured 1 KB header and program it with
+   `e31b_flash_update.cmm`:
    ```sh
-   tools/keytools/sign --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
+   IMAGE_HEADER_SIZE=1024 tools/keytools/sign --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
    ```
 3. On the console, `status` shows the update. `trigger` then `reboot` swaps
    the partitions. Version 2 boots, finds the TESTING state and marks itself

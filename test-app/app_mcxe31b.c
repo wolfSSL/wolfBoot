@@ -37,6 +37,9 @@
 #include "keystore.h"
 #include "target.h"
 #include "image.h"
+#ifdef ENABLE_WOLFIP
+#include "wolfip_tftp_test.h"
+#endif
 
 #ifdef TARGET_mcxe31b
 
@@ -50,12 +53,46 @@
 /* ============== SysTick Timer ============== */
 
 static volatile uint32_t jiffies = 0;
+#ifdef ENABLE_WOLFIP
+/* Upper 32 bits of the ms count, so the network timebase does not wrap */
+static volatile uint32_t jiffies_hi = 0;
+#endif
 
 /* SysTick interrupt handler - called isr_systick to match startup_arm.c */
 void isr_systick(void)
 {
     jiffies++;
+#ifdef ENABLE_WOLFIP
+    if (jiffies == 0U) {
+        jiffies_hi++;
+    }
+#endif
 }
+
+#ifdef ENABLE_WOLFIP
+/* Millisecond timebase for wolfip_tftp_test.c. 64 bits, so it is monotonic
+ * across the 32-bit wrap of jiffies. */
+uint64_t wolfip_test_get_ms(void)
+{
+    uint32_t hi, lo;
+
+    /* Read again if SysTick carried into the upper word in between */
+    do {
+        hi = jiffies_hi;
+        lo = jiffies;
+    } while (hi != jiffies_hi);
+
+    return ((uint64_t)hi << 32) | lo;
+}
+
+#ifndef DEBUG_UART
+/* No console: the network test cannot be cancelled */
+int wolfip_test_abort(void)
+{
+    return 0;
+}
+#endif
+#endif
 
 static void delay_ms(uint32_t ms)
 {
@@ -694,6 +731,9 @@ static int cmd_update(const char *args);
 static int cmd_timestamp(const char *args);
 static int cmd_trigger(const char *args);
 static int cmd_status(const char *args);
+#ifdef ENABLE_WOLFIP
+static int cmd_network(const char *args);
+#endif
 
 typedef struct {
     int (*fn)(const char *args);
@@ -709,6 +749,9 @@ static const console_cmd_t commands[] = {
     {cmd_trigger,   "trigger",  "Trigger update (if update image in flash)"},
     {cmd_update,    "update",   "Update firmware via XMODEM"},
     {cmd_timestamp, "timestamp", "Show current system time"},
+#ifdef ENABLE_WOLFIP
+    {cmd_network,   "network",  "Run the wolfIP network test"},
+#endif
     {cmd_reboot,    "reboot",   "Reboot the system"},
     {NULL, NULL, NULL}
 };
@@ -826,6 +869,30 @@ static int cmd_update(const char *args)
     (void)args;
     return cmd_update_xmodem();
 }
+
+#ifdef ENABLE_WOLFIP
+static int cmd_network(const char *args)
+{
+    (void)args;
+    wolfip_tftp_test_report();
+    return 0;
+}
+
+#ifdef DEBUG_UART
+/* Non-zero when Ctrl-C arrived on the console. Other input is discarded. */
+int wolfip_test_abort(void)
+{
+    char c;
+    int abort = 0;
+
+    while (uart_getc(&c) > 0) {
+        if (c == 0x03)
+            abort = 1;
+    }
+    return abort;
+}
+#endif
+#endif
 
 static int parse_command(const char* cmd)
 {

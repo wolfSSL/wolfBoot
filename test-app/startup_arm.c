@@ -76,6 +76,13 @@ extern void nxp_mcxe_enet_irq_handler(void);
 
 #ifdef TARGET_mcxe31b
 extern void isr_debug_uart(void);
+/* MCXE31B EMAC common interrupt (IRQ 105) */
+#if defined(NXP_MCXE31B_EMAC_IRQ) && (NXP_MCXE31B_EMAC_IRQ == 1)
+extern void nxp_mcxe31b_emac_irq_handler(void);
+#define isr_emac nxp_mcxe31b_emac_irq_handler
+#else
+#define isr_emac isr_empty
+#endif
 #endif
 
 #if defined(TARGET_va416x0) || defined(TARGET_lpc55s69)
@@ -107,10 +114,18 @@ void isr_reset(void)
         "ldr r0, =_start_ecc_ram\n\t"
         "ldr r1, =_end_ecc_ram\n\t"
         "movs r2, #0\n\t"
+#ifdef TARGET_mcxe31b
+        /* SRAM ECC words are 64 bits: [_start, _end) is 8-byte aligned */
+        "movs r3, #0\n\t"
+#endif
         "1:\n\t"
         "cmp r0, r1\n\t"
         "bhs 2f\n\t"
+#ifdef TARGET_mcxe31b
+        "strd r2, r3, [r0], #8\n\t"
+#else
         "str r2, [r0], #4\n\t"
+#endif
         "b 1b\n\t"
         "2:\n\t"
         "b isr_reset_c\n\t"
@@ -652,8 +667,9 @@ void (* const IV[])(void) =
 
 
 #elif defined(TARGET_mcxe31b) /* For NXP MCXE31B */
-    /* IRQs 0-145 unused, 146 = LPUART5 (console) */
+    /* IRQs 0-145 unused except 105 = EMAC, 146 = LPUART5 (console) */
     [16 ... (16 + 145)] = isr_empty,
+    [16 + 105] = isr_emac,
     [16 + 146] = isr_debug_uart,
 
 #elif defined(TARGET_va416x0) /* For Vorago VA416xx */

@@ -96,6 +96,9 @@ IF OS.FILE("&basedir\test-app\image.elf")
 sYmbol.SourcePATH.SetBaseDir "&basedir"
 &srcdirs="""&basedir"" ""&basedir\src"" ""&basedir\hal"" ""&basedir\test-app"""
 &srcdirs="&srcdirs ""&basedir\lib\wolfssl\wolfcrypt\src"""
+; wolfIP and its MCXE31B port (test-app built with ENABLE_WOLFIP=1)
+&srcdirs="&srcdirs ""&basedir\lib\wolfip\src"" ""&basedir\lib\wolfip\src\tftp"""
+&srcdirs="&srcdirs ""&basedir\lib\wolfip\src\port\nxp_mcxe31b_emac"""
 sYmbol.SourcePATH.Set &srcdirs
 
 ENDDO

@@ -1772,6 +1772,29 @@ ifeq ($(ENABLE_WOLFIP),1)
     ifeq ($(WOLFIP_SPEED_TEST),1)
       CFLAGS+=-DNXP_MCXE_ENET_STATS=1
     endif
+  else ifeq ($(TARGET),mcxe31b)
+    WOLFIP_PORT:=nxp_mcxe31b_emac
+    WOLFIP_PORT_OBJ:=nxp_mcxe31b_emac.o
+    # wolfIP state in SRAM, EMAC rings in the DTCM (ARM-mcxe31b-wolfip.ld)
+    LSCRIPT_TEMPLATE=ARM-mcxe31b-wolfip.ld
+    # Clear all of SRAM at reset, before it is read (ECC)
+    CFLAGS+=-DAPP_RAM_ECC_INIT
+    # NXP_MCXE31B_EMAC_IRQ=0 polls the EMAC instead of using its interrupt
+    NXP_MCXE31B_EMAC_IRQ?=1
+    CFLAGS+=-DWOLFIP_PORT_MCXE31B_EMAC
+    CFLAGS+=-DNXP_MCXE31B_EMAC_IRQ=$(NXP_MCXE31B_EMAC_IRQ)
+    CFLAGS+=-DTFTP_RAM_MAX=0x20000U
+    # Six full segments of TCP buffering per socket
+    CFLAGS+=-DRXBUF_SIZE=9216 -DTXBUF_SIZE=9216
+    # remove -ffreestanding so small memcpy's can be inlined
+    WOLFIP_CFLAGS_FILTEROUT:=-ffreestanding
+    # Take at most 8 frames per wolfIP_poll() so the app can drain a socket
+    # between batches
+    WOLFIP_CFLAGS_ADD:=-O2 -DWOLFIP_POLL_BUDGET=8
+    # Driver cycle counters for the throughput test's CPU breakdown
+    ifeq ($(WOLFIP_SPEED_TEST),1)
+      CFLAGS+=-DNXP_MCXE31B_EMAC_STATS=1
+    endif
   else
     WOLFIP_PORT:=nxp_fman
     WOLFIP_PORT_OBJ:=nxp_fman.o
