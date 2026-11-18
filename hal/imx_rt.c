@@ -881,6 +881,38 @@ void hal_prepare_boot(void)
 {
 }
 
+#if defined(USE_GET_CONFIG) && (WOLFBOOT_SECTOR_SIZE == CONFIG_FLASH_BLOCK_SIZE)
+/* Serial NOR erase commands, with a 3-byte and with a 4-byte address */
+#define FLASH_CMD_SECTOR_ERASE      0x20U
+#define FLASH_CMD_SECTOR_ERASE_4B   0x21U
+#define FLASH_CMD_BLOCK_ERASE       0xD8U
+#define FLASH_CMD_BLOCK_ERASE_4B    0xDCU
+
+/* The ROM erase function walks the range in steps of sectorSize and runs the
+ * erase sector sequence for each step, so a wolfBoot sector of one flash block
+ * is erased as many small sectors. Make that sequence the block erase command
+ * and the step the block size: one erase command per wolfBoot sector.
+ * The configuration is left as it is when the sequence does not start with a
+ * known sector erase command. */
+static void RAMFUNCTION hal_flash_erase_by_block(flexspi_nor_config_t *config)
+{
+    uint32_t *seq = &config->memConfig.lookupTable[LUT_SEQ_IDX_5];
+    uint32_t cmd = seq[0] & 0xFFU;
+
+    if (cmd == FLASH_CMD_SECTOR_ERASE) {
+        cmd = FLASH_CMD_BLOCK_ERASE;
+    }
+    else if (cmd == FLASH_CMD_SECTOR_ERASE_4B) {
+        cmd = FLASH_CMD_BLOCK_ERASE_4B;
+    }
+    else {
+        return;
+    }
+    seq[0] = (seq[0] & ~0xFFU) | cmd;
+    config->sectorSize = CONFIG_FLASH_BLOCK_SIZE;
+}
+#endif
+
 static int RAMFUNCTION hal_flash_init(void)
 {
     status_t ret = 0;
@@ -901,6 +933,11 @@ static int RAMFUNCTION hal_flash_init(void)
             CONFIG_FLASH_FLEXSPI_INSTANCE,
             &flexspi_config,
             &flexspi_cfg_option);
+#if WOLFBOOT_SECTOR_SIZE == CONFIG_FLASH_BLOCK_SIZE
+        if (ret == kStatus_Success) {
+            hal_flash_erase_by_block(&flexspi_config);
+        }
+#endif
         if (ret == kStatus_Success) {
             ret = g_bootloaderTree->flexSpiNorDriver->init(
                 CONFIG_FLASH_FLEXSPI_INSTANCE,
