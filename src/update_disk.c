@@ -766,6 +766,40 @@ int wolfBoot_disk_dts_fixup(fdt_ctx* ctx)
 }
 #endif
 
+#ifdef WOLFBOOT_FSP
+#ifndef WOLFBOOT_CMDLINE_MAX
+#define WOLFBOOT_CMDLINE_MAX 256
+#endif
+
+/* The image's signed kernel command line, or NULL when there is none */
+static const char *disk_signed_cmdline(const uint8_t *hdr)
+{
+    static char disk_cmdline[WOLFBOOT_CMDLINE_MAX];
+    uint8_t *val = NULL, *digest = NULL;
+    uint16_t len;
+
+    len = wolfBoot_find_header((uint8_t *)hdr + IMAGE_HEADER_OFFSET,
+                               HDR_CMDLINE, &val);
+    if (len == 0 || val == NULL)
+        return NULL;
+    /* The signature covers the header only up to the digest TLV */
+    if (wolfBoot_find_header((uint8_t *)hdr + IMAGE_HEADER_OFFSET,
+                             WOLFBOOT_SHA_HDR, &digest) == 0 ||
+        val + len > digest - 2 * sizeof(uint16_t)) {
+        wolfBoot_printf("Ignoring a cmdline outside the signed header\r\n");
+        return NULL;
+    }
+    if (len >= sizeof(disk_cmdline)) {
+        wolfBoot_printf("Signed cmdline too long (%d), using built-in\r\n",
+                        (int)len);
+        return NULL;
+    }
+    memcpy(disk_cmdline, val, len);
+    disk_cmdline[len] = '\0';
+    return disk_cmdline;
+}
+#endif
+
 void RAMFUNCTION wolfBoot_start(void)
 {
     uint8_t p_hdr[IMAGE_HEADER_SIZE] XALIGNED_STACK(16);
@@ -1589,6 +1623,11 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
         boot_state_on_boot(booted_ver);
     }
+#endif
+#ifdef WOLFBOOT_FSP
+    /* The image's signed kernel command line, read before the decrypted
+     * header is wiped */
+    stage2_params->cmdline = (uint32_t)(uintptr_t)disk_signed_cmdline(hdr_ptr);
 #endif
 #ifdef DISK_ENCRYPT
     disk_decrypted_header_clear(dec_hdr);

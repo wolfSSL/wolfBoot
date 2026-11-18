@@ -236,6 +236,30 @@ uint8_t io_read8(uint16_t port)
     return v;
 }
 
+/* CMOS/RTC scratch RAM (0x70/0x71). Bytes 0x40-0x7F are outside the RTC
+ * checksum and survive a 0xCF9 reset but not loss of the RTC well. Bit 7 of
+ * the index port is NMI-disable and must be preserved. */
+#define CMOS_INDEX_PORT 0x70
+#define CMOS_DATA_PORT  0x71
+
+uint8_t cmos_read(uint8_t index)
+{
+    uint8_t nmi;
+
+    nmi = io_read8(CMOS_INDEX_PORT) & 0x80;
+    io_write8(CMOS_INDEX_PORT, nmi | (index & 0x7F));
+    return io_read8(CMOS_DATA_PORT);
+}
+
+void cmos_write(uint8_t index, uint8_t value)
+{
+    uint8_t nmi;
+
+    nmi = io_read8(CMOS_INDEX_PORT) & 0x80;
+    io_write8(CMOS_INDEX_PORT, nmi | (index & 0x7F));
+    io_write8(CMOS_DATA_PORT, value);
+}
+
 /**
  * @brief Reset the system.
  *
@@ -366,6 +390,75 @@ void cpuid(uint32_t eax_param,
         *ecx = _ecx;
     if (edx != NULL)
         *edx = _edx;
+}
+
+static void cpuid_subleaf(uint32_t leaf, uint32_t subleaf, uint32_t *eax,
+                          uint32_t *ebx)
+{
+    uint32_t a, b, c, d;
+
+    __asm__ __volatile__ ("cpuid"
+                          : "=a"(a), "=b"(b), "=c"(c), "=d"(d)
+                          : "a"(leaf), "c"(subleaf));
+    (void)c;
+    (void)d;
+    *eax = a;
+    *ebx = b;
+}
+
+#define MSR_CORE_THREAD_COUNT 0x35
+
+/**
+ * @brief List the APIC IDs of the enabled logical processors.
+ *
+ * MSR_CORE_THREAD_COUNT gives the enabled cores and threads (CPUID leaf 0xB
+ * still counts the second thread when Hyper-Threading is off), and leaf 0xB
+ * the APIC ID layout: thread t of core c has APIC ID (c << SMT shift) | t,
+ * with enabled cores taken to be numbered from 0. The primary threads come
+ * first, then their siblings, as a BIOS orders the MADT.
+ *
+ * @param ids Output array of APIC IDs.
+ * @param max Capacity of ids.
+ * @return The number of IDs written, or 0 if the counts are unusable.
+ */
+int x86_cpu_apic_ids(uint8_t *ids, int max)
+{
+    uint32_t eax, ebx, lo, hi;
+
+    __asm__ __volatile__ ("rdmsr" : "=a"(lo), "=d"(hi)
+                          : "c"(MSR_CORE_THREAD_COUNT));
+    (void)hi;
+    cpuid_subleaf(0xb, 0, &eax, &ebx);
+    (void)ebx;
+    return x86_apic_ids_from_topology(lo, eax & 0x1f, ids, max);
+}
+
+/**
+ * @brief APIC IDs from MSR_CORE_THREAD_COUNT and the SMT shift.
+ *
+ * @param core_thread_count MSR_CORE_THREAD_COUNT: threads in bits 15:0,
+ *        cores in bits 31:16.
+ * @param shift APIC ID bits taken by the thread number (CPUID 0xB level 0).
+ * @param ids Output array of APIC IDs.
+ * @param max Capacity of ids.
+ * @return The number of IDs written, or 0 if the counts are unusable.
+ */
+int x86_apic_ids_from_topology(uint32_t core_thread_count, uint32_t shift,
+                               uint8_t *ids, int max)
+{
+    uint32_t threads, logical, cores, t, c;
+    int n = 0;
+
+    logical = core_thread_count & 0xffff;
+    cores = (core_thread_count >> 16) & 0xffff;
+    if (cores == 0 || logical < cores)
+        return 0;
+    threads = logical / cores;
+    for (t = 0; t < threads; t++) {
+        for (c = 0; c < cores && n < max; c++)
+            ids[n++] = (uint8_t)((c << shift) | t);
+    }
+    return n;
 }
 
 /**

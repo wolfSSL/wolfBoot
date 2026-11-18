@@ -103,6 +103,13 @@ static int e820_add_entry_cb(uint64_t start, uint64_t length, uint32_t type,
     struct boot_params *bp = (struct boot_params*)ctx;
     struct boot_e820_entry *map;
 
+    /* Only memory goes in the e820 map. An MMIO range listed as reserved
+     * keeps the kernel from assigning PCI BARs in it, and an I/O port range
+     * is not memory at all. */
+    if (type != EFI_RESOURCE_SYSTEM_MEMORY &&
+        type != EFI_RESOURCE_MEMORY_RESERVED)
+        return 0;
+
     if (bp->e820_entries >= E820_MAX_ENTRIES_ZEROPAGE)
         return -1;
 
@@ -333,6 +340,14 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
     param.e820_table[param.e820_entries].size = ACPI_TABLE_SIZE;
     param.e820_table[param.e820_entries].type = E820_TYPE_ACPI;
     param.e820_entries++;
+    /* The kernel uses the MCFG range only if firmware marks it reserved */
+    if (param.e820_entries < E820_MAX_ENTRIES_ZEROPAGE) {
+        param.e820_table[param.e820_entries].addr = PCI_ECAM_BASE;
+        param.e820_table[param.e820_entries].size =
+            (uint64_t)(ACPI_PCI_END_BUS + 1) << 20;
+        param.e820_table[param.e820_entries].type = E820_TYPE_RESERVED;
+        param.e820_entries++;
+    }
 #endif /* WOLFBOOT_ACPI */
 
     if (param.hdr.setup_sects != 0) {

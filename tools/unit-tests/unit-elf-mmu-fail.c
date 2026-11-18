@@ -69,6 +69,17 @@ static int mmu_cb_ok(uint64_t vaddr, uint64_t paddr, uint32_t size)
     return 0;
 }
 
+static int g_map_calls;
+
+static int mmu_cb_count(uint64_t vaddr, uint64_t paddr, uint32_t size)
+{
+    (void)vaddr;
+    (void)paddr;
+    (void)size;
+    g_map_calls++;
+    return 0;
+}
+
 /* Build a minimal ELF64 with two 8-byte PT_LOAD segments, with their
  * data at image offsets 256 and 264, mapped onto g_target. */
 static void build_elf(void)
@@ -152,12 +163,60 @@ START_TEST(test_successful_mappings_still_load)
 }
 END_TEST
 
+/* p_filesz above p_memsz would copy past the range the callback checked. */
+START_TEST(test_filesz_above_memsz_is_rejected)
+{
+    elf64_program_header *ph;
+    uintptr_t entry = 0;
+    int ret;
+
+    build_elf();
+    ph = (elf64_program_header *)(g_image + sizeof(elf64_header));
+    ph[1].file_size = 16;
+    memset(g_image + 272, 0x3C, 8);
+
+    ret = elf_load_image_mmu(g_image, sizeof(g_image), &entry, mmu_cb_ok);
+
+    ck_assert_int_ne(ret, 0);
+    ck_assert_msg(entry == 0, "entry point published for p_filesz > p_memsz");
+    ck_assert_uint_eq(g_target[24], 0);
+}
+END_TEST
+
+/* A p_memsz the 32-bit callback size cannot hold must be rejected before
+ * the callback sees a truncated size and before anything is written. */
+START_TEST(test_memsz_above_callback_size_is_rejected)
+{
+    elf64_program_header *ph;
+    uintptr_t entry = 0;
+    int ret;
+
+    if (sizeof(uintptr_t) <= 4)
+        return;
+
+    build_elf();
+    ph = (elf64_program_header *)(g_image + sizeof(elf64_header));
+    ph[0].mem_size = 0x100000000ULL + 8;
+    g_map_calls = 0;
+
+    ret = elf_load_image_mmu(g_image, sizeof(g_image), &entry,
+                             mmu_cb_count);
+
+    ck_assert_int_ne(ret, 0);
+    ck_assert_int_eq(g_map_calls, 0);
+    ck_assert_msg(entry == 0, "entry point published for a 4 GB segment");
+    ck_assert_uint_eq(g_target[0], 0);
+}
+END_TEST
+
 Suite *elf_mmu_fail_suite(void)
 {
     Suite *s  = suite_create("ELF mmu failure");
     TCase *tc = tcase_create("mmu-cb-failure");
     tcase_add_test(tc, test_mmu_failure_aborts_load);
     tcase_add_test(tc, test_successful_mappings_still_load);
+    tcase_add_test(tc, test_filesz_above_memsz_is_rejected);
+    tcase_add_test(tc, test_memsz_above_callback_size_is_rejected);
     tcase_set_timeout(tc, 10);
     suite_add_tcase(s, tc);
     return s;

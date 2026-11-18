@@ -79,6 +79,39 @@ int main(void)
         return 1;
     }
 
+    /* Only RAM and reserved memory are listed: MMIO and I/O port ranges
+     * must not appear as reserved memory. */
+    {
+        static const uint32_t types[] = {
+            EFI_RESOURCE_SYSTEM_MEMORY, EFI_RESOURCE_MEMORY_MAPPED_IO,
+            EFI_RESOURCE_IO, EFI_RESOURCE_MEMORY_MAPPED_IO_PORT,
+            EFI_RESOURCE_MEMORY_RESERVED, EFI_RESOURCE_IO_RESERVED
+        };
+        unsigned int n = sizeof(types) / sizeof(types[0]);
+
+        p = hoblist;
+        for (i = 0; i < (int)n; i++) {
+            rd = (struct efi_hob_resource_descriptor *)p;
+            rd->resource_type = types[i];
+            rd->physical_start = 0x1000ULL * (i + 1);
+            rd->resource_length = 0x1000;
+            p += sizeof(struct efi_hob_resource_descriptor);
+        }
+        end = (struct efi_hob_generic_header *)p;
+        end->hob_type = EFI_HOB_TYPE_END_OF_HOB_LIST;
+        end->hob_length = sizeof(struct efi_hob_generic_header);
+        memset(&obj.bp, 0, sizeof(obj.bp));
+        if (memory_map_from_hoblist(&obj.bp, (struct efi_hob *)hoblist) != 0 ||
+            obj.bp.e820_entries != 2 ||
+            obj.bp.e820_table[0].addr != 0x1000 ||
+            obj.bp.e820_table[0].type != E820_TYPE_RAM ||
+            obj.bp.e820_table[1].addr != 0x5000 ||
+            obj.bp.e820_table[1].type != E820_TYPE_RESERVED) {
+            printf("FAIL: MMIO or I/O ranges listed in the e820 map\n");
+            return 1;
+        }
+    }
+
     printf("PASS\n");
     return 0;
 }

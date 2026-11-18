@@ -32,6 +32,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <x86/common.h>
+#include <wolfboot/wolfboot.h>
 
 #include <printf.h>
 #include <stage2_params.h>
@@ -94,48 +95,66 @@ void jump(uintptr_t entry)
             : "g"(entry));
 }
 
-/**
- * @brief Perform the boot process for the given application.
- *
- * This function performs the boot process for the specified application.
- * It either loads and boots a Linux payload or an ELF binary, depending on the
- * configuration.
- *
- * @param app Pointer to the start of the application.
- */
-void do_boot(const uint32_t *app)
+#if defined(WOLFBOOT_ELF)
+/* wolfBoot's own memory: stage 2, the staged payload after it, and the stack,
+ * page tables and FSP memory above them, all from the stage 2 load address
+ * up to 4 GB. */
+#define ELF_RESERVED_START ((uint64_t)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE)
+#define ELF_RESERVED_END (1ULL << 32)
+
+static int elf_reserved_overlap(uint64_t addr, uint32_t size)
 {
-    struct stage2_parameter *stage2_params;
+    return size != 0 && addr < ELF_RESERVED_END &&
+           addr + size > ELF_RESERVED_START;
+}
 
-#ifdef WOLFBOOT_TPM
-    wolfBoot_tpm2_deinit();
-#endif /* WOLFBOOT_TPM */
-
-    stage2_params = stage2_get_parameters();
-#if defined(WOLFBOOT_LINUX_PAYLOAD)
-    mptable_setup();
-    load_linux((uint8_t *)app, stage2_params->payload_size, stage2_params,
-               cmdline);
-#elif defined(WOLFBOOT_ELF)
-    int r;
-    uint64_t e;
-    uint8_t *mb2_header;
-    elf_mmu_map_cb mmu_cb = NULL;
-
+/* The loader copies through vaddr, and an address that is already mapped
+ * keeps its identity mapping, so both ranges are checked. */
+static int boot_elf_map_cb(uint64_t vaddr, uint64_t paddr, uint32_t size)
+{
+    if (elf_reserved_overlap(paddr, size) ||
+        elf_reserved_overlap(vaddr, size)) {
+        wolfBoot_printf("ELF: segment at 0x%x_%x overlaps wolfBoot memory\r\n",
+                        (uint32_t)(paddr >> 32), (uint32_t)paddr);
+        return -1;
+    }
 #ifdef WOLFBOOT_64BIT
-    mmu_cb = x86_paging_map_memory;
-#endif /* WOLFBOOT_64BIT */
+    /* pages are mapped whole, so the checked range is only the one written
+     * when both addresses sit at the same offset in their page */
+    if (((vaddr ^ paddr) & 0xFFF) != 0) {
+        wolfBoot_printf("ELF: segment addresses differ in page offset\r\n");
+        return -1;
+    }
+    return x86_paging_map_memory(vaddr, paddr, size);
+#else
+    (void)vaddr;
+    return 0;
+#endif
+}
+
+/**
+ * @brief Load an ELF image and boot it, through Multiboot2 when enabled.
+ *
+ * @param app Pointer to the start of the ELF image.
+ * @param stage2_params Stage 2 parameters (memory layout and FSP HOBs).
+ */
+static void boot_elf(const uint32_t *app,
+                     struct stage2_parameter *stage2_params)
+{
+    int r;
+    uint64_t e = 0;
+    uint8_t *mb2_header;
 
     /* TODO: to remove */
     mptable_setup();
     x86_paging_dump_info();
-    /* Use available low memory as upper bound for ELF image size */
-    if (stage2_params->tolum <= (uint32_t)(uintptr_t)app) {
-        wolfBoot_printf("ELF: app address beyond TOLUM\r\n");
+    /* The disk loader records the verified payload size */
+    if (stage2_params->payload_size == 0) {
+        wolfBoot_printf("ELF: no verified payload size\r\n");
         panic();
     }
-    r = elf_load_image_mmu((uint8_t *)app,
-            stage2_params->tolum - (uint32_t)(uintptr_t)app, &e, mmu_cb);
+    r = elf_load_image_mmu((uint8_t *)app, stage2_params->payload_size, &e,
+            boot_elf_map_cb);
     wolfBoot_printf("Elf loaded (ret %d), entry 0x%x_%x\r\n", r,
                     (uint32_t)(e >> 32),
                     (uint32_t)(e));
@@ -144,7 +163,8 @@ void do_boot(const uint32_t *app)
         panic();
 
 #ifdef WOLFBOOT_MULTIBOOT2
-    mb2_header = mb2_find_header((uint8_t*)app, 1024*1024*15);
+    mb2_header = mb2_find_header((uint8_t*)app,
+                                 (int)stage2_params->payload_size);
     if (mb2_header == NULL) {
         wolfBoot_printf("No mb2 header found\r\n");
         panic();
@@ -163,7 +183,41 @@ void do_boot(const uint32_t *app)
 #else
     jump(e);
 #endif /* WOLFBOOT_MULTIBOOT2 */
+}
+#endif /* WOLFBOOT_ELF */
 
+/**
+ * @brief Perform the boot process for the given application.
+ *
+ * This function performs the boot process for the specified application.
+ * It either loads and boots a Linux payload or an ELF binary, depending on the
+ * configuration. With both built in, an image starting with the ELF magic
+ * takes the ELF path and anything else boots as Linux.
+ *
+ * @param app Pointer to the start of the application.
+ */
+void do_boot(const uint32_t *app)
+{
+    struct stage2_parameter *stage2_params;
+
+#ifdef WOLFBOOT_TPM
+    wolfBoot_tpm2_deinit();
+#endif /* WOLFBOOT_TPM */
+
+    stage2_params = stage2_get_parameters();
+#if defined(WOLFBOOT_LINUX_PAYLOAD) && defined(WOLFBOOT_ELF)
+    if (memcmp(app, ELF_IDENT_STR, 4) == 0) {
+        boot_elf(app, stage2_params);
+        return;
+    }
+#endif
+#if defined(WOLFBOOT_LINUX_PAYLOAD)
+    mptable_setup();
+    load_linux((uint8_t *)app, stage2_params->payload_size, stage2_params,
+               stage2_params->cmdline != 0 ?
+               (const char *)(uintptr_t)stage2_params->cmdline : cmdline);
+#elif defined(WOLFBOOT_ELF)
+    boot_elf(app, stage2_params);
 #else
 #error "No payload compiled in"
 #endif /* WOLFBOOT_LINUX_PAYLOAD */

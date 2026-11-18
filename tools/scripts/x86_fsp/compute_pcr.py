@@ -43,10 +43,11 @@ def get_config_value(config: str, name):
 
 def get_sha256_hash_of_wolfboot_image(file_path: str):
     """
-    Get sha256 hash of wolfboot image at file_path
+    Get the image digest (SHA-256 or SHA-384 TLV) of wolfboot image at file_path
     """
     HDR_OFF = 8
     WOLFBOOT_SHA_HDR = 0x03
+    WOLFBOOT_SHA384_HDR = 0x14
     with open(file_path, 'rb') as f:
         data = f.read()
     data = data[HDR_OFF:]
@@ -57,7 +58,7 @@ def get_sha256_hash_of_wolfboot_image(file_path: str):
         t, l = struct.unpack('<HH', data[:4])
         if l == 0:
             return None
-        if t == WOLFBOOT_SHA_HDR:
+        if t in (WOLFBOOT_SHA_HDR, WOLFBOOT_SHA384_HDR):
             return data[4:4+l]
         data = data[4+l:]
 
@@ -117,10 +118,11 @@ if __name__ == '__main__':
 
     is_measured_boot = get_config_value(config, 'MEASURED_BOOT') == '1'
 
-    # wolfBoot_image_measure() extends PCR with wolfboot image hash
+    # wolfBoot_image_measure() re-hashes the wolfboot image digest with
+    # SHA-256 and extends PCR0 with the result
     if is_measured_boot:
         wb_hash = get_sha256_hash_of_wolfboot_image('stage1/wolfboot_raw_v1_signed.bin')
-        pcr0 = pcr_extend(pcr0, wb_hash)
+        pcr0 = pcr_extend(pcr0, get_sha256_hash(wb_hash))
         print(f"PCR0 after wolfboot image measure: {pcr0.hex()}")
 
     # the pcrdigest needed by policy_sign tool is the hash of the concatenation of all PCRs involved in the policy.

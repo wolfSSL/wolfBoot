@@ -42,6 +42,12 @@
 #include <loader.h>
 #include <tpm.h>
 #endif
+#ifdef WOLFBOOT_FSP_NVS_CACHE
+#include <x86/fsp_nvs.h>
+#endif
+#ifdef WOLFBOOT_MEASURED_BOOT
+#include <wolfssl/wolfcrypt/sha256.h>
+#endif
 
 
 #define WOLFBOOT_X86_STACK_SIZE 0x10000
@@ -262,10 +268,17 @@ static void jump_into_wolfboot(void)
 #endif /* WOLFBOOT_64BIT */
 
 #if defined(WOLFBOOT_MEASURED_BOOT)
-/* The image needs to be already verified */
+#if WOLFBOOT_TPM_PCR_DIG_SZ != 32
+#error "measured boot: the stage 1 re-hash only implements a SHA-256 PCR bank"
+#endif
+/* The image needs to be already verified. Its authenticated digest is
+ * re-hashed with SHA-256 and that value extended, as the OS measurement in
+ * update_disk.c is. */
 int wolfBoot_image_measure(uint8_t *image)
 {
     struct wolfBoot_image img;
+    uint8_t digest[SHA256_DIGEST_SIZE];
+    wc_Sha256 sha;
     int ret;
 
     memset(&img, 0, sizeof(img));
@@ -279,9 +292,18 @@ int wolfBoot_image_measure(uint8_t *image)
         return -1;
     }
 
-    wolfBoot_print_hexstr(img.sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, 0);
-    return wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, img.sha_hash,
-        __LINE__);
+    ret = wc_InitSha256(&sha);
+    if (ret != 0)
+        return -1;
+    ret = wc_Sha256Update(&sha, img.sha_hash, WOLFBOOT_SHA_DIGEST_SIZE);
+    if (ret == 0)
+        ret = wc_Sha256Final(&sha, digest);
+    wc_Sha256Free(&sha);
+    if (ret != 0)
+        return -1;
+
+    wolfBoot_print_hexstr(digest, sizeof(digest), 0);
+    return wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, digest, __LINE__);
 }
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
@@ -542,6 +564,9 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     uint32_t status;
     uint16_t type;
     uint32_t esp;
+#if defined(WOLFBOOT_FSP_NVS_CACHE) && defined(BUILD_LOADER_STAGE1)
+    int nvs_used;
+#endif
 
     (void)stack_top;
     (void)timestamp;
@@ -586,6 +611,11 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     if (status != 0) {
         panic();
     }
+#if defined(WOLFBOOT_FSP_NVS_CACHE) && defined(BUILD_LOADER_STAGE1)
+    nvs_used = fsp_nvs_apply(udp_m_parameter,
+                             fsp_m_info_header->CfgRegionSize, fsp_m_base,
+                             fsp_m_info_header->ImageSize);
+#endif
 
 #if defined(WOLFBOOT_DUMP_FSP_UPD)
     wolfBoot_printf("Dumping fspm udp (%d bytes)" ENDLINE, (int)fsp_m_info_header->CfgRegionSize);
@@ -604,6 +634,12 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     fsp_handle_reset(status);
     if (status != EFI_SUCCESS) {
         wolfBoot_printf("failed: 0x%x" ENDLINE, status);
+#if defined(WOLFBOOT_FSP_NVS_CACHE) && defined(BUILD_LOADER_STAGE1)
+        if (nvs_used) {
+            fsp_nvs_reject();
+            reset(0);
+        }
+#endif
         panic();
     }
     wolfBoot_printf("success" ENDLINE);

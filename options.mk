@@ -63,6 +63,32 @@ ifeq ($(TARGET),nai_68int6)
   ifneq ($(ACPI),1)
     $(error nai_68int6 needs ACPI=1: its PCI interrupt routing is only in the DSDT)
   endif
+  # PCIe switch straps and start-up delays (see docs/Targets.md)
+  NAI_68INT6_PCIE_LANES?=8x1
+  NAI_68INT6_PCIE_LANE_CONFIGS:=8x1 1x4_4x1 4x1_1x4 1x4_1x4 1x8
+  ifeq ($(filter $(NAI_68INT6_PCIE_LANES),$(NAI_68INT6_PCIE_LANE_CONFIGS)),)
+    $(error NAI_68INT6_PCIE_LANES must be one of: $(NAI_68INT6_PCIE_LANE_CONFIGS))
+  endif
+  CFLAGS+=-DNAI_68INT6_PCIE_LANES_$(NAI_68INT6_PCIE_LANES)
+  # PCI BAR pools in the 0x80000000-0xBFFFFFFF window the DSDT advertises:
+  # 512 MB each, so a large BAR behind the PCIe switch leaves room for the
+  # devices enumerated after it
+  CFLAGS+=-DPCI_MMIO32_BASE=0x80000000ULL -DPCI_MMIO32_LENGTH=0x20000000U
+  CFLAGS+=-DPCI_MMIO32_PREFETCH_BASE=0xA0000000ULL
+  CFLAGS+=-DPCI_MMIO32_PREFETCH_LENGTH=0x20000000U
+  $(foreach option,FSP_HYPERTHREADING NAI_68INT6_PCIE_NT NAI_68INT6_BACKPLANE_CLK \
+    NAI_68INT6_PCIE_LINK_DELAY_S NAI_68INT6_BOOT_DELAY_S \
+    NAI_68INT6_FPGA_READY_DELAY_S NAI_68INT6_DEBUG_CONSENT, \
+    $(if $($(option)),$(eval CFLAGS+=-D$(option)=$($(option)))))
+endif
+
+# These options need wolfTPM and turn it on, so an explicit WOLFTPM=0 alongside
+# one of them is a conflict rather than something to override silently.
+ifeq ($(WOLFTPM),0)
+  ifneq ($(filter 1,$(ANTI_ROLLBACK) $(MEASURED_BOOT) $(WOLFBOOT_TPM_VERIFY) \
+                    $(WOLFBOOT_TPM_KEYSTORE) $(WOLFBOOT_TPM_SEAL)),)
+    $(error WOLFTPM=0 conflicts with ANTI_ROLLBACK, MEASURED_BOOT, WOLFBOOT_TPM_VERIFY, WOLFBOOT_TPM_KEYSTORE or WOLFBOOT_TPM_SEAL; set those to 0 too)
+  endif
 endif
 
 # TPM NV version floor and boot audit counters (see docs/Targets.md).
@@ -2061,10 +2087,35 @@ ifeq ($(FSP), 1)
     PCH_PCR_BASE \
     PCI_ECAM_BASE \
     WOLFBOOT_LOAD_BASE \
-    FSP_S_LOAD_BASE
+    FSP_S_LOAD_BASE \
+    MP_CPU_NUM_ENTRY \
+    WOLFBOOT_CMDLINE_MAX
 
     # set CFLAGS defines for each x86_fsp option
     $(foreach option,$(X86_FSP_OPTIONS),$(if $($(option)), $(eval CFLAGS += -D$(option)=$($(option)))))
+
+  ifeq ($(FSP_NVS_CACHE),1)
+    ifeq ($(and $(FSP_NVS_BASE),$(FSP_NVS_SIZE)),)
+      $(error FSP_NVS_CACHE=1 needs FSP_NVS_BASE and FSP_NVS_SIZE)
+    endif
+    ifeq ($(filter $(TARGET),kontron_vx3060_s2 nai_68int6),)
+      $(error FSP_NVS_CACHE=1 is only supported on the Tiger Lake targets)
+    endif
+    CFLAGS+=-DWOLFBOOT_FSP_NVS_CACHE
+    CFLAGS+=-DFSP_NVS_BASE=$(FSP_NVS_BASE) -DFSP_NVS_SIZE=$(FSP_NVS_SIZE)
+    ifeq ($(FSP_NVS_TPM),1)
+      # anti-rollback disables the platform hierarchy before handoff, which
+      # is what keeps the OS from rewriting the reference hash, so a boot
+      # that cannot disable it must halt
+      ifneq ($(ANTI_ROLLBACK),1)
+        $(error FSP_NVS_TPM=1 needs ANTI_ROLLBACK=1)
+      endif
+      ifneq ($(ANTI_ROLLBACK_HALT_ON_FAILURE),1)
+        $(error FSP_NVS_TPM=1 needs ANTI_ROLLBACK_HALT_ON_FAILURE=1)
+      endif
+      CFLAGS+=-DWOLFBOOT_FSP_NVS_TPM
+    endif
+  endif
 endif
 
 ifeq ($(FLASH_MULTI_SECTOR_ERASE),1)
