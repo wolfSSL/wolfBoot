@@ -863,6 +863,12 @@ extern void ARM_MPU_Disable(void);
 extern int wc_dcp_init(void);
 static int hal_flash_init(void);
 
+/* The DCP port of wolfCrypt does not maintain the data cache for the buffers
+ * it hands to the DCP, so the data cache stays off when the DCP is in use. */
+#if defined(WOLFSSL_IMXRT_DCP) && !defined(IMX_RT_NO_DCACHE)
+#define IMX_RT_NO_DCACHE
+#endif
+
 void hal_init(void)
 {
 #if defined(__WOLFBOOT) && defined(WOLFSSL_IMXRT_DCP)
@@ -870,6 +876,15 @@ void hal_init(void)
 #endif
     ARM_MPU_Disable();
     clock_init();
+#ifdef __WOLFBOOT
+    /* The boot ROM leaves the L1 caches off. Without them the image hash and
+     * the signature verification run from memory-mapped flash at a fraction
+     * of the speed. */
+    SCB_EnableICache();
+#ifndef IMX_RT_NO_DCACHE
+    SCB_EnableDCache();
+#endif
+#endif
 #ifdef DEBUG_UART
     uart_init();
     uart_write("wolfBoot HAL Init\n", 18);
@@ -879,6 +894,15 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+#ifdef __WOLFBOOT
+    /* Start the application the way the boot ROM would, with the caches off.
+     * Disabling the data cache cleans it first, disabling the instruction
+     * cache drops its contents. */
+#ifndef IMX_RT_NO_DCACHE
+    SCB_DisableDCache();
+#endif
+    SCB_DisableICache();
+#endif
 }
 
 static int RAMFUNCTION hal_flash_init(void)
