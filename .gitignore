@@ -275,6 +275,7 @@ tools/unit-tests/unit-image-hybrid
 tools/unit-tests/unit-imx-rt-cache-align
 tools/unit-tests/unit-update-disk-fit
 tools/unit-tests/unit-update-disk-oob
+tools/unit-tests/unit-update-disk-amp
 tools/unit-tests/unit-update-ram-enc
 tools/unit-tests/unit-update-ram-enc-nopart
 tools/unit-tests/unit-va416x0-fram
@@ -692,6 +693,7 @@ tools/unit-tests/fdt_memrsv_extract.h
 tools/unit-tests/hifive1_flash_write_extract.h
 tools/unit-tests/mpfs250_wdt_extract.h
 tools/unit-tests/unit-mpfs-wdt
+tools/unit-tests/unit-mpfs-wdt-os-owned
 tools/unit-tests/hifive1_hfrosccfg_extract.h
 tools/unit-tests/keystore_api_extract.h
 tools/unit-tests/keystore_emitted.c

@@ -101,6 +101,7 @@ static void assert_windows_untouched(void)
     }
 }
 
+#ifndef MPFS_WDT_NODES_KEEP
 /* Counter below MVRP on every hart: all five take the refresh. */
 START_TEST(test_refresh_when_permitted)
 {
@@ -181,17 +182,37 @@ START_TEST(test_one_forbidden_hart_does_not_suppress_the_rest)
 }
 END_TEST
 
+#else
+/* An S-mode build that hands the watchdogs to the OS: one refresh would lock
+ * TIME, MVRP and TRIGGER before the OS watchdog driver can program them. */
+START_TEST(test_os_owned_refreshes_none)
+{
+    unsigned int i;
+
+    mpfs_wdt_pet_all();
+    for (i = 0; i < MPFS_NUM_HARTS; i++) {
+        ck_assert_int_eq(refreshed(i), 0);
+    }
+    assert_windows_untouched();
+}
+END_TEST
+#endif
+
 Suite *mpfs_wdt_suite(void)
 {
     Suite *s = suite_create("mpfs-wdt");
     TCase *tc = tcase_create("pet");
 
     tcase_add_checked_fixture(tc, wdt_mock_setup, wdt_mock_teardown);
+#ifndef MPFS_WDT_NODES_KEEP
     tcase_add_test(tc, test_refresh_when_permitted);
     tcase_add_test(tc, test_no_refresh_when_forbidden);
     tcase_add_test(tc, test_refresh_is_decided_per_hart);
     tcase_add_test(tc, test_other_status_bits_do_not_block);
     tcase_add_test(tc, test_one_forbidden_hart_does_not_suppress_the_rest);
+#else
+    tcase_add_test(tc, test_os_owned_refreshes_none);
+#endif
     suite_add_tcase(s, tc);
 
     return s;

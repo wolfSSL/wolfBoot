@@ -48,6 +48,11 @@
 #include <wolfssl/wolfcrypt/sha256.h>
 #endif
 #include "disk.h"
+
+#ifdef MPFS_AMP_HART
+/* hal/mpfs250.c */
+extern int mpfs_amp_load(void *fit);
+#endif
 #ifdef DISK_BOOT_CONFIRM
 #include "disk_trailer.h"
 #endif
@@ -1198,6 +1203,20 @@ void RAMFUNCTION wolfBoot_start(void)
             continue;
         }
 #endif
+#ifdef MPFS_AMP_MEM_BASE
+        /* The staging copy runs before the signature check, so it must not
+         * reach the memory of the bare-metal image running on the AMP hart. */
+        if (((uint64_t)(uintptr_t)load_address <
+                (uint64_t)MPFS_AMP_MEM_BASE + (uint64_t)MPFS_AMP_MEM_SIZE) &&
+            ((uint64_t)(uintptr_t)load_address + os_image.fw_size >
+                (uint64_t)MPFS_AMP_MEM_BASE)) {
+            wolfBoot_printf("Image size %u overlaps the AMP memory\r\n",
+                os_image.fw_size);
+            SET_FAILOVER(DISK_FAILOVER_NO_IMAGE);
+            selected ^= 1;
+            continue;
+        }
+#endif
 
 #ifdef WOLFBOOT_FSP
         /* Verify image size fits in low memory. Reuse the validated
@@ -1426,6 +1445,16 @@ void RAMFUNCTION wolfBoot_start(void)
             }
             load_address = new_load;
         }
+#ifdef MPFS_AMP_HART
+        /* The AMP hart's image comes from the same verified FIT. */
+        if (mpfs_amp_load(fit) != 0) {
+#ifdef DISK_ENCRYPT
+            disk_decrypted_header_clear(dec_hdr);
+            disk_crypto_clear();
+#endif
+            wolfBoot_panic();
+        }
+#endif
 #if defined(WOLFBOOT_ZYNQMP_FSBL) && defined(MMU)
         /* Load BL31 (ARM-TF) from the FIT "atf" sub-image, if present. */
         atf_load = fit_load_image(fit, "atf", NULL);

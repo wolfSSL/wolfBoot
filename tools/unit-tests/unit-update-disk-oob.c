@@ -69,6 +69,16 @@ static struct {
 #endif
 #define WOLFBOOT_LOAD_ADDRESS ((uintptr_t)region.load)
 
+#ifdef UNIT_DISK_AMP
+/* The AMP image's memory sits in the tail of the load region: a staging copy
+ * that reaches it must be refused before any byte is written. */
+#define AMP_TEST_SIZE     0x100
+#define AMP_TEST_OFF      (DISK_LOAD_MAX - AMP_TEST_SIZE)
+#define AMP_TEST_FILL     0xA5
+#define MPFS_AMP_MEM_BASE ((uintptr_t)region.load + AMP_TEST_OFF)
+#define MPFS_AMP_MEM_SIZE AMP_TEST_SIZE
+#endif
+
 /* Backing store for the partitions. Partition A is sized to the attacker's
  * declared image so the mock disk serves every requested byte (modelling a
  * large attacker-written partition); partition B is left blank. */
@@ -109,6 +119,9 @@ static void reset_mocks(void)
 {
     memset(region.load, 0, sizeof(region.load));
     memset(region.canary, CANARY_FILL, sizeof(region.canary));
+#ifdef UNIT_DISK_AMP
+    memset(region.load + AMP_TEST_OFF, AMP_TEST_FILL, AMP_TEST_SIZE);
+#endif
     memset(part_b_image, 0, sizeof(part_b_image));
     mock_disk_init_ret = 0;
     mock_disk_close_called = 0;
@@ -288,13 +301,59 @@ START_TEST(test_update_disk_accepts_exact_max_fw_size)
 }
 END_TEST
 
+#ifdef UNIT_DISK_AMP
+static int amp_intact(void)
+{
+    int i;
+    for (i = 0; i < AMP_TEST_SIZE; i++) {
+        if (region.load[AMP_TEST_OFF + i] != AMP_TEST_FILL)
+            return 0;
+    }
+    return 1;
+}
+
+/* An image whose staging range ends one byte inside the AMP memory must be
+ * refused before the payload read. */
+START_TEST(test_update_disk_amp_rejects_overlap)
+{
+    reset_mocks();
+    build_part_a(7, AMP_TEST_OFF + 1, 0xEE);
+
+    wolfBoot_start();
+
+    ck_assert_msg(amp_intact(), "staging copy wrote into the AMP memory");
+    ck_assert_int_eq(mock_do_boot_called, 0);
+    ck_assert_int_gt(wolfBoot_panicked, 0);
+}
+END_TEST
+
+/* An image that ends right below the AMP memory still boots. */
+START_TEST(test_update_disk_amp_accepts_adjacent)
+{
+    reset_mocks();
+    build_part_a(7, AMP_TEST_OFF, 0xEE);
+
+    wolfBoot_start();
+
+    ck_assert_msg(amp_intact(), "staging copy wrote into the AMP memory");
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+}
+END_TEST
+#endif
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot");
     TCase *tc = tcase_create("update-disk-oob");
 
     tcase_add_test(tc, test_update_disk_oob_rejects_oversize_fw_size);
+#ifdef UNIT_DISK_AMP
+    tcase_add_test(tc, test_update_disk_amp_rejects_overlap);
+    tcase_add_test(tc, test_update_disk_amp_accepts_adjacent);
+#else
     tcase_add_test(tc, test_update_disk_accepts_exact_max_fw_size);
+#endif
     suite_add_tcase(s, tc);
 
     return s;
