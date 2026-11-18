@@ -5546,7 +5546,7 @@ By default the read LUT sequence for all i.MX RT targets uses a quad read. If yo
 
 ### Erasing by flash block
 
-The boot ROM erases a range one flash sector at a time, 4 KB on the QSPI flash chips. When `WOLFBOOT_SECTOR_SIZE` is set to the block size of the flash (64 KB), on the targets that get the flash configuration from the boot ROM (RT1040, RT1060/1061/1062, RT1064) wolfBoot erases each of its sectors with one block erase command instead, which is several times faster. The partitions and the swap area then have to be aligned to the block size.
+The boot ROM erases a range one flash sector at a time, 4 KB on the QSPI flash chips. When `WOLFBOOT_SECTOR_SIZE` is set to the block size of the flash (64 KB), on the targets that get the flash configuration from the boot ROM (RT1040, RT1060/1061/1062, RT1064) wolfBoot erases each of its sectors with one block erase command instead, which is several times faster. This is not done when `FLASH_ERASE_UNIT` is set to a smaller size. The partitions and the swap area then have to be aligned to the block size.
 
 ### Building wolfBoot for HAB (High Assurance Boot)
 

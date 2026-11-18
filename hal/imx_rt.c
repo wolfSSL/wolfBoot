@@ -881,7 +881,16 @@ void hal_prepare_boot(void)
 {
 }
 
-#if defined(USE_GET_CONFIG) && (WOLFBOOT_SECTOR_SIZE == CONFIG_FLASH_BLOCK_SIZE)
+/* Erase by flash block when every erase request is a whole block: the wolfBoot
+ * sector is one block and no smaller erase unit is configured. */
+#if defined(USE_GET_CONFIG) && \
+    (WOLFBOOT_SECTOR_SIZE == CONFIG_FLASH_BLOCK_SIZE) && \
+    (!defined(WOLFBOOT_FLASH_ERASE_UNIT) || \
+     (WOLFBOOT_FLASH_ERASE_UNIT == CONFIG_FLASH_BLOCK_SIZE))
+#define IMX_RT_ERASE_BY_BLOCK
+#endif
+
+#ifdef IMX_RT_ERASE_BY_BLOCK
 /* Serial NOR erase commands, with a 3-byte and with a 4-byte address */
 #define FLASH_CMD_SECTOR_ERASE      0x20U
 #define FLASH_CMD_SECTOR_ERASE_4B   0x21U
@@ -933,7 +942,7 @@ static int RAMFUNCTION hal_flash_init(void)
             CONFIG_FLASH_FLEXSPI_INSTANCE,
             &flexspi_config,
             &flexspi_cfg_option);
-#if WOLFBOOT_SECTOR_SIZE == CONFIG_FLASH_BLOCK_SIZE
+#ifdef IMX_RT_ERASE_BY_BLOCK
         if (ret == kStatus_Success) {
             hal_flash_erase_by_block(&flexspi_config);
         }
