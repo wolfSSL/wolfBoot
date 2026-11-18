@@ -45,6 +45,7 @@ This README describes configuration of supported targets.
 * [NXP RW612](#nxp-rw612)
 * [NXP S32K1XX](#nxp-s32k1xx)
 * [NXP MCXE247](#nxp-mcxe247)
+* [NXP MCXE31B](#nxp-mcxe31b)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T10xx PPC (T1024 / T1040)](#nxp-qoriq-t10xx-ppc-t1024--t1040)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
@@ -7493,6 +7494,115 @@ While TRACE32 is attached, it halts the CPU at the reset vector on every reset.
 Detach with `SYStem.Down` before testing an update, which relies on a software
 reset.
 
+
+## NXP MCXE31B
+
+The NXP MCX E31B is a Cortex-M7 microcontroller with 4 MB of code flash (four
+1 MB blocks), 128 KB of data flash and 512 KB of SRAM. It has its own
+bare-metal `mcxe31b` HAL. No SDK is needed. The port targets the FRDM-MCXE31B
+board.
+
+- The boot ROM (Secure BAF) starts wolfBoot through the Image Vector Table
+  (IVT) that the HAL places at `0x00400000`.
+- Flash (C40ASF): 8 KB sectors. Each 64-bit ECC segment can be programmed once
+  between erases, and a program operation writes up to 128 bytes.
+- wolfBoot and the test application use the 64 KB CM7_0 DTCM for data, stack
+  and the `RAM_CODE` flash routines. The DTCM is ECC protected; the reset
+  handler clears it before use (`WOLFBOOT_RAM_ECC_INIT`, set by `arch.mk`).
+- `hal_init()` switches from the boot ROM's FIRC 48 MHz to the PLL (16 MHz
+  crystal, reference manual clock "Option A"): core 160 MHz, AIPS_PLAT 80 MHz,
+  AIPS_SLOW 40 MHz. It first enables the last mile regulator, which the
+  FRDM-MCXE31B feeds through the Q1 ballast on VRC_CTRL. If a step fails,
+  wolfBoot stays on FIRC and prints a warning.
+- The I-cache and D-cache are on while wolfBoot runs; flash program and erase
+  invalidate the D-cache over the modified range. Both caches are cleaned and
+  turned off before the jump to the application. The clocks stay at 160 MHz.
+
+### NXP MCXE31B: Memory Layout
+
+| Region | Address Range | Size |
+|--------|---------------|------|
+| IVT + Bootloader | 0x00400000 - 0x0040FFFF | 64 KB |
+| Boot Partition | 0x00410000 - 0x005EFFFF | 1920 KB |
+| Update Partition | 0x005F0000 - 0x007CFFFF | 1920 KB |
+| Swap Sector | 0x007D0000 - 0x007D1FFF | 8 KB |
+
+`0x007D4000 - 0x007FFFFF` is not used: the Secure BAF occupies the last 48 KB,
+and the security firmware uses the 128 KB below it when its feature flag is
+set. The boot ROM uses the lowest valid IVT, so the IVT of wolfBoot at
+`0x00400000` always wins.
+
+### NXP MCXE31B: Building
+
+```sh
+cp config/examples/mcxe31b.config .config
+make
+```
+
+`factory.bin` (wolfBoot plus the signed version 1 test application) must be
+programmed at `0x00400000`.
+
+The console is on the MCU-Link VCOM port (LPUART5, PTE14 TX, PTE3 RX, 115200
+8N1). The test application shows green on the RGB LED for version 1 and blue
+for later versions, and has the same console as the
+[S32K1xx test application](#nxp-s32k1xx-test-application).
+
+### NXP MCXE31B: Configuration Options
+
+| Option | Description |
+|--------|-------------|
+| `NVM_FLASH_WRITEONCE` | **Required.** A 64-bit ECC segment can be programmed once between erases, so trailer updates erase and rewrite the sector. |
+| `RAM_CODE` | **Required.** The flash program and erase routines run from DTCM, so the block being written is not read. The linker script checks this. |
+| `DEBUG_UART` | Console output on LPUART5 (MCU-Link VCOM). |
+
+### NXP MCXE31B: Programming with Lauterbach TRACE32
+
+Connect the 10-pin debug cable to J14 and short JP5 to disable the onboard
+MCU-Link SWD. TRACE32 R2024.09 has no MCXE31B entry. The S32K314 has the same
+debug architecture (AHB-AP 4 = CM7_0, MDM-AP 6, SDA-AP 7) and flash
+controller, so use `SYStem.CPU S32K314-M7` with SWD (JTAG on J14 does not
+work). Program `factory.bin` at `0x00400000`.
+
+Scripts for this are in `tools/scripts/mcxe31b`. They find the build output
+relative to their own location, so run them from the wolfBoot checkout, for
+example `DO <wolfBoot>/tools/scripts/mcxe31b/e31b_flash_factory_bin.cmm`:
+
+| Script | Purpose |
+|--------|---------|
+| `e31b_debug.cmm` | Reset and halt the CPU, then load the `wolfboot.elf` and `test-app/image.elf` symbols |
+| `e31b_flash_factory_bin.cmm` | Program `factory.bin`, erase the update partition and swap sector, then reset and detach |
+| `e31b_flash_update.cmm` | Program `test-app/image_v2_signed.bin` into the update partition, then reset and detach |
+
+Each script writes a log to the TRACE32 system directory (`~~`).
+
+The flash scripts run the TRACE32 S32K3 flash algorithm (`s32k3x4.bin`) from
+the DTCM, which they clear first so its ECC is valid. They leave the data
+flash and the Secure BAF area untouched. The factory script refuses a file
+without the IVT marker at offset 0.
+
+`SYStem.Up` sometimes reports a debug port time-out while the boot ROM runs.
+`e31b_debug.cmm` then attaches, and finds the core halted at the reset vector.
+
+While TRACE32 is attached, it halts the CPU at the reset vector on every reset.
+Detach with `SYStem.Down` before testing an update, which relies on a software
+reset.
+
+### NXP MCXE31B: Testing an update
+
+Tested on the FRDM-MCXE31B:
+
+1. Program `factory.bin` with `e31b_flash_factory_bin.cmm`. wolfBoot boots
+   version 1 and the RGB LED is green.
+2. Sign version 2 and program it with `e31b_flash_update.cmm`:
+   ```sh
+   tools/keytools/sign --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
+   ```
+3. On the console, `status` shows the update. `trigger` then `reboot` swaps
+   the partitions. Version 2 boots, finds the TESTING state and marks itself
+   successful. The RGB LED is blue.
+
+The console `update` command receives a signed image over XMODEM-CRC into the
+update partition instead, and triggers it.
 
 ## TI Hercules TMS570LC435
 

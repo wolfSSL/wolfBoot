@@ -74,6 +74,10 @@ extern void nxp_mcxe_enet_irq_handler(void);
 #endif
 #endif
 
+#ifdef TARGET_mcxe31b
+extern void isr_debug_uart(void);
+#endif
+
 #if defined(TARGET_va416x0) || defined(TARGET_lpc55s69)
 #define isr_systick SysTick_Handler
 #elif !defined(APP_HAS_SYSTICK)
@@ -646,6 +650,11 @@ void (* const IV[])(void) =
     isr_empty,              // TIM8_CC_IRQ 46
     isr_empty,              // DMA1_STREAM7_IRQ 47
 
+
+#elif defined(TARGET_mcxe31b) /* For NXP MCXE31B */
+    /* IRQs 0-145 unused, 146 = LPUART5 (console) */
+    [16 ... (16 + 145)] = isr_empty,
+    [16 + 146] = isr_debug_uart,
 
 #elif defined(TARGET_va416x0) /* For Vorago VA416xx */
     /* IRQ 0 through TXEV_IRQn (195), for 212 entries. wolfBoot points VTOR

@@ -1112,6 +1112,15 @@ ifeq ($(TARGET),s32k1xx)
     CFLAGS+=-DRAM_CODE -DDEBUG_UART
 endif
 
+ifeq ($(TARGET),mcxe31b)
+    LSCRIPT_TEMPLATE=ARM-mcxe31b.ld
+    ifneq ($(SIGN),NONE)
+        APP_OBJS+=../src/keystore.o
+    endif
+    CFLAGS+=-DAPP_HAS_SYSTICK
+    CFLAGS+=-DRAM_CODE -DDEBUG_UART
+endif
+
 ifeq ($(TARGET),stm32n6)
     CFLAGS+=-DRAM_CODE -DDEBUG_UART
     APP_OBJS+=syscalls.o
