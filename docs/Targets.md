@@ -5659,6 +5659,10 @@ be added to the configuration.
 
 By default the read LUT sequence for all i.MX RT targets uses a quad read. If your flash chip does not support this feature by default, e.g. the QE-bit is disabled from the factory, it is necessary to use a single read instead. This can be accomplished by defining `CONFIG_IMX_FCB_LUT_SINGLE_READ_DATA` when compiling wolfBoot, e.g. by adding it to the `CFLAGS_EXTRA` variable in the configuration file.
 
+### L1 caches
+
+wolfBoot enables the instruction cache and the data cache of the Cortex-M7 in `hal_init()` and disables both again in `hal_prepare_boot()`, so the application starts with the caches off, as it would after the boot ROM. The data cache stays off when the DCP is used (`PKA=1`), and can be kept off by defining `IMX_RT_NO_DCACHE`, e.g. by adding it to the `CFLAGS_EXTRA` variable in the configuration file.
+
 ### Building wolfBoot for HAB (High Assurance Boot)
 
 The `imx_rt` target supports building without a flash configuration, IVT, Boot Data and DCD. This is needed when wanting to use HAB through NXP's *Secure Provisioning Tool* to sign wolfBoot to enable secure boot. To build wolfBoot this way `TARGET_IMX_HAB` needs to be set to 1 in the configuration file (see `config/examples/imx-rt1060 _hab.config` for an example). When built with `TARGET_IMX_HAB=1` wolfBoot must be written to flash using NXP's *Secure Provisioning Tool*.
