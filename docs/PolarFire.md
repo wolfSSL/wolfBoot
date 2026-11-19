@@ -15,6 +15,7 @@ wolfBoot runs here either as a payload of Microchip's Hart Software Services or 
 - [Building wolfBoot](#building-wolfboot)
 - [QSPI](#qspi)
 - [HSS S-mode with L2-LIM (no DDR)](#hss-s-mode-with-l2-lim-no-ddr)
+- [Linux beside a bare-metal hart (AMP)](#linux-beside-a-bare-metal-hart-amp)
 - [M-mode (bare-metal eNVM boot)](#m-mode-bare-metal-envm-boot)
 - [M-mode + DDR: booting Linux (minimal SBI)](#m-mode--ddr-booting-linux-minimal-sbi)
 - [Boot mode 2: User Boot Loader stub](#boot-mode-2-user-boot-loader-stub)
@@ -313,7 +314,7 @@ These flags apply to `polarfire_mpfs250_m_qspi.config` and are added via `CFLAGS
 | Flag | Default | Description |
 |------|---------|-------------|
 | `WATCHDOG` | undefined | Has no timeout to set on this target: the MSS watchdogs are armed by the bitstream and their window cannot be changed from software. See "Watchdog policy" below. wolfBoot refreshes all five in `hal_init()` and again in `hal_prepare_boot()` either way. |
-| `MPFS_WDT_NODES_KEEP` (make variable, `=1`) | undefined | Linux boot only: keep the five MSS watchdog nodes enabled in the dtb and stop the parked E51 from refreshing them, so the OS owns the watchdogs. See "Watchdog policy" below. |
+| `MPFS_WDT_NODES_KEEP` (make variable, `=1`) | undefined (`1` in `polarfire_mpfs250.config`) | Linux boot only: keep the five MSS watchdog nodes enabled in the dtb and stop the parked E51 from refreshing them, so the OS owns the watchdogs. In an S-mode build under HSS, wolfBoot never refreshes them. See "Watchdog policy" below. |
 | `MPFS_QSPI_CLK_DIV` (make variable) | `QSPI_CLK_DIV_8` | QSPI SCK divider, a `QSPI_CLK_DIV_*` name from `hal/mpfs250.h`. See "PolarFire SoC QSPI". |
 | `MPFS_SC_PROBE` (make variable) | `1` on M-mode builds | Read-only: at boot, report whether the System Controller serves the device serial number, the TRNG nonce and PUF emulation, with two stability checks (nonce differs across calls, PUF response repeats). Only service status and the two comparisons are printed, never a serial, nonce or PUF value. `MPFS_SC_PROBE=0` disables it. M-mode only. |
 | `MPFS_SNVM_DUMP` (make variable, `=1`) | undefined | Read-only: at boot, print the admin word, state and a checksum of `MPFS_SNVM_DUMP_COUNT` sNVM pages from `MPFS_SNVM_DUMP_FIRST` (defaults 2 from 200, the keystore and the wrapped image key). Page contents are never printed. M-mode only. |
@@ -488,6 +489,67 @@ python3 tools/scripts/mpfs_qspi_prog.py /dev/ttyUSB1 \
   to back the LIM SRAM region. See the M-mode section for a detailed explanation.
 - UART output appears on MMUART1 (`/dev/ttyUSB1`), same as other S-mode configurations.
 
+## Linux beside a bare-metal hart (AMP)
+
+wolfBoot can boot Linux on U54_1-3 while U54_4 runs a separate bare-metal application, for example a firmware TPM. Linux must not use the application's DDR, and must not try to start its hart.
+
+### M-mode wolfBoot (HSS replacement)
+
+The application travels in the same signed FIT as the kernel, as an extra image, so the one signature covers both and it follows the A/B slot:
+
+```
+fwtpm-1 {
+    description = "bare-metal image for U54_4";
+    data = /incbin/("app.bin");      /* objcopy -O binary app.elf */
+    type = "firmware";
+    arch = "riscv";
+    compression = "none";
+    load = <0x91c00000>;
+    entry = <0x91c00000>;
+    hash-1 { algo = "sha256"; };
+};
+```
+
+List it in the configuration (`loadables = "fwtpm-1";`) and build an M-mode SD or eMMC configuration with the hart, the image's memory and, optionally, the image's node name (`MPFS_AMP_IMAGE`, default `fwtpm-1`):
+
+```sh
+cp config/examples/polarfire_mpfs250_m.config .config
+make MPFS_AMP_HART=4 MPFS_AMP_MEM_BASE=0x91C00000 MPFS_AMP_MEM_SIZE=0x400000
+```
+
+After verifying the FIT, wolfBoot copies the image to `MPFS_AMP_MEM_BASE` (refusing one larger than `MPFS_AMP_MEM_SIZE`) and refuses to boot if it is missing. Before releasing hart 1 it zeroes the L2 LIM with doubleword stores, since the LIM comes out of reset with unwritten ECC and HSS is not there to clear it, and starts the AMP hart in M-mode at the image's first byte with interrupts off; the image sets up its own trap vector and stack. The kernel's dtb gets a `/memreserve/` entry for the image's memory and the AMP hart's `cpu@` node disabled, and the SBI refuses `hart_start` for that hart. The parked E51 keeps refreshing all five watchdogs, the AMP hart's included, so `MPFS_WDT_NODES_KEEP` cannot be combined with `MPFS_AMP_HART`. If the application uses the System Controller mailbox, build with `MPFS_SCB_SMODE_DENY=1` so Linux's drivers stay off it.
+
+The boot log shows the image loaded and the hart started:
+
+```
+AMP: 'fwtpm-1' loaded at 0x91C00000 (329728 bytes) for hart 4
+FDT: Reserved AMP memory 0x91C00000, size 0x400000
+Starting hart 4 in M-mode at 0x91C00000 (AMP)
+Releasing hart 1 into S-mode at 0x80200000 (dtb=0x8A000000)
+```
+
+### wolfBoot as an HSS payload
+
+HSS can start wolfBoot on U54_1-3 and the application on U54_4 from one payload:
+
+```yaml
+set-name: 'PolarFire-SoC-HSS::wolfBoot + bare metal'
+hart-entry-points: {u54_1: '0x80000000', u54_2: '0x80000000', u54_3: '0x80000000', u54_4: '0x91C00000'}
+payloads:
+  wolfboot.elf: {owner-hart: u54_1, secondary-hart: u54_2, secondary-hart: u54_3, priv-mode: prv_s, ancilliary-data: hal/mpfs.dtb}
+  app.elf: {exec-addr: '0x91C00000', owner-hart: u54_4, priv-mode: prv_m, skip-opensbi: true}
+```
+
+HSS passes the payload no device tree and its OpenSBI domain does not fence the other hart's memory off from it, so nothing tells Linux that the application's DDR is in use; Linux allocates it and overwrites the running application. Build wolfBoot with that region and it adds a `/memreserve/` entry for it to the kernel's dtb:
+
+```sh
+make MPFS_AMP_MEM_BASE=0x91C00000 MPFS_AMP_MEM_SIZE=0x400000 WOLFBOOT_RAMBOOT_MAX_SIZE=0x03C00000
+```
+
+wolfBoot stages the image at `WOLFBOOT_LOAD_ADDRESS` before checking its signature and refuses an image whose staging range would reach the AMP memory. With the example `WOLFBOOT_LOAD_ADDRESS=0x8E000000`, `WOLFBOOT_RAMBOOT_MAX_SIZE=0x03C00000` ends the staging window at `0x91C00000`.
+
+The FIT's dtb should also mark the AMP hart's `cpu@` node `disabled`; otherwise Linux tries to start that hart through SBI and logs that it failed to.
+
 ## M-mode (bare-metal eNVM boot)
 
 wolfBoot supports running directly in Machine Mode (M-mode) on PolarFire SoC, replacing the Hart
@@ -649,7 +711,11 @@ answers with a chip reset rather than an error (STATUS bit 2). An M-mode build r
 after setting MVRP itself and never lands there, but a build running as an HSS payload
 inherits the supervisor's window, so `mpfs_wdt_pet_all()` tests that bit per watchdog and
 skips any refresh that would reset the board; the window is whole seconds wide and every
-caller loops, so a skipped refresh costs nothing. After hand-off the parked
+caller loops, so a skipped refresh costs nothing. An HSS payload that boots Linux needs
+`MPFS_WDT_NODES_KEEP=1` (`polarfire_mpfs250.config` sets it), which stops wolfBoot refreshing
+them at all: the first refresh locks TIME, MVRP and TRIGGER until reset, the Linux `mpfs_wdt`
+driver programs those at probe, and a locked watchdog resets the board during the Linux boot.
+After hand-off the parked
 E51 acts as a monitor and refreshes all five watchdogs; the OS watchdog driver is disabled via
 the dtb fixup so the two never conflict. `MPFS_WDT_NODES_KEEP=1` hands the watchdogs to the OS
 instead: the dtb nodes stay enabled and the parked E51 stops refreshing, so the OS driver arms

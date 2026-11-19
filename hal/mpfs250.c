@@ -71,10 +71,12 @@ extern void sdhci_irq_handler(void);
  * (40 MHz E51 reset, 150 MHz under HSS), raised when M-mode raises the PLL. */
 uint32_t mpfs_apb_clk_hz = MSS_APB_AHB_CLK;
 
+#if defined(WOLFBOOT_RISCV_MMODE) || !defined(MPFS_WDT_NODES_KEEP)
 static const unsigned long mpfs_wdt_bases[MPFS_NUM_HARTS] = {
     MSS_WDT_E51_BASE, MSS_WDT_U54_1_BASE, MSS_WDT_U54_2_BASE,
     MSS_WDT_U54_3_BASE, MSS_WDT_U54_4_BASE
 };
+#endif
 
 #ifdef WOLFBOOT_RISCV_MMODE
 /* CPU MHz for the mcycle udelay(); seeded at the E51 reset clock and bumped
@@ -164,6 +166,15 @@ static void mpfs_signal_main_hart_started(void)
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
 
+#if defined(MPFS_AMP_HART) && \
+    (!defined(MPFS_DDR_INIT) || !defined(WOLFBOOT_MMODE_SMODE_BOOT))
+#error MPFS_AMP_HART needs the M-mode Linux boot (MPFS_DDR_INIT and WOLFBOOT_MMODE_SMODE_BOOT)
+#endif
+#if defined(MPFS_AMP_HART) && \
+    ((MPFS_AMP_HART) <= MPFS_FIRST_U54_HART || (MPFS_AMP_HART) > MPFS_LAST_U54_HART)
+#error MPFS_AMP_HART must be a U54 other than the Linux boot hart
+#endif
+
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
 /* Per-hart S-mode start mailboxes, consumed by secondary_hart_entry().  In the
  * DTIM (uncached, hart-coherent) at +0x100; SBI shared state is at +0x000. */
@@ -174,6 +185,12 @@ typedef struct {
 } mpfs_kernel_handoff_t;
 
 #define MPFS_KERNEL_HANDOFF_MARKER  0x4C4E5858UL  /* "LNXX" */
+#ifdef MPFS_AMP_HART
+#define MPFS_AMP_HANDOFF_MARKER     0x414D504DUL  /* "AMPM" */
+
+/* Entry of the AMP image, set once mpfs_amp_load() has placed it. */
+static unsigned long mpfs_amp_entry;
+#endif
 
 #define mpfs_kernel_handoff \
     ((mpfs_kernel_handoff_t *)(0x01000000UL + 0x100UL))
@@ -206,6 +223,21 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls)
             riscv_mmode_to_smode(kentry, hartid, opq);
             /* never returns */
         }
+#ifdef MPFS_AMP_HART
+        /* The AMP image stays in M-mode and sets up its own trap vector and
+         * stack; it must not take the IPI that released it. */
+        if (hartid == (unsigned long)MPFS_AMP_HART &&
+            mpfs_kernel_handoff[hartid].marker == MPFS_AMP_HANDOFF_MARKER) {
+            unsigned long aentry;
+            __asm__ volatile("fence r,rw" ::: "memory");
+            aentry = (unsigned long)mpfs_kernel_handoff[hartid].entry;
+            __asm__ volatile("csrw mie, zero");
+            CLINT_MSIP_REG(hartid) = 0;
+            __asm__ volatile("fence iorw, iorw" ::: "memory");
+            __asm__ volatile("fence.i" ::: "memory");
+            ((void (*)(unsigned long))aentry)(hartid);
+        }
+#endif
         /* Sleep until the next IPI (e.g. a future SBI HSM hart_start),
          * then clear it and re-check the mailbox. */
         __asm__ volatile("wfi");
@@ -243,6 +275,11 @@ int sbi_hal_hart_start(unsigned long hartid, unsigned long saddr,
         hartid > (unsigned long)MPFS_LAST_U54_HART) {
         return -1;
     }
+#ifdef MPFS_AMP_HART
+    if (hartid == (unsigned long)MPFS_AMP_HART) {
+        return -1;
+    }
+#endif
     mpfs_kernel_handoff[hartid].entry = (uint64_t)saddr;
     mpfs_kernel_handoff[hartid].opaque = (uint64_t)opaque;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
@@ -284,6 +321,30 @@ hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
      * clock driver ungates SUBBLK_CLOCK_CR but does not lift the soft reset. */
     mpfs_mmc_os_release();
 
+#ifdef MPFS_AMP_HART
+    if (mpfs_amp_entry == 0UL) {
+        wolfBoot_printf("AMP: no image loaded for hart %d\n", MPFS_AMP_HART);
+        wolfBoot_panic();
+    }
+    /* The LIM comes out of reset with unwritten ECC that only a doubleword
+     * store initialises; the AMP image and the OS share memory there. */
+    {
+        volatile uint64_t *lim = (volatile uint64_t *)MPFS_L2_LIM_BASE;
+        unsigned long n;
+        for (n = 0; n < MPFS_L2_LIM_SIZE / sizeof(uint64_t); n++) {
+            lim[n] = 0;
+        }
+    }
+    mpfs_kernel_handoff[MPFS_AMP_HART].entry = (uint64_t)mpfs_amp_entry;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+    mpfs_kernel_handoff[MPFS_AMP_HART].marker = MPFS_AMP_HANDOFF_MARKER;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+    wolfBoot_printf("Starting hart %d in M-mode at 0x%lx (AMP)\n",
+                    MPFS_AMP_HART, mpfs_amp_entry);
+    CLINT_MSIP_REG(MPFS_AMP_HART) = 0x01;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+#endif
+
     mpfs_kernel_handoff[MPFS_FIRST_U54_HART].entry = (uint64_t)entry;
     mpfs_kernel_handoff[MPFS_FIRST_U54_HART].opaque = (uint64_t)dtb;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
@@ -312,6 +373,29 @@ hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
     }
     __builtin_unreachable();
 }
+
+#ifdef MPFS_AMP_HART
+/* Places the AMP image at MPFS_AMP_MEM_BASE, bounded by MPFS_AMP_MEM_SIZE, and
+ * enters it at its first byte: the image is linked to run there. */
+int mpfs_amp_load(void *fit)
+{
+    int len = 0;
+    void *p;
+
+    p = fit_load_image_to((fdt_ctx *)fit, MPFS_AMP_IMAGE,
+                          (void *)MPFS_AMP_MEM_BASE,
+                          (uint32_t)MPFS_AMP_MEM_SIZE, &len);
+    if (p == NULL || len <= 0) {
+        wolfBoot_printf("AMP: no usable '%s' image in the FIT\n",
+                        MPFS_AMP_IMAGE);
+        return -1;
+    }
+    mpfs_amp_entry = (unsigned long)MPFS_AMP_MEM_BASE;
+    wolfBoot_printf("AMP: '%s' loaded at 0x%lx (%d bytes) for hart %d\n",
+                    MPFS_AMP_IMAGE, mpfs_amp_entry, len, MPFS_AMP_HART);
+    return 0;
+}
+#endif
 #endif /* MPFS_DDR_INIT && WOLFBOOT_MMODE_SMODE_BOOT */
 
 #endif /* WOLFBOOT_RISCV_MMODE */
@@ -1330,6 +1414,33 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
 #ifdef WOLFBOOT_UPDATE_DISK
     (void)wolfBoot_disk_dts_fixup(&ctx);
 #endif
+#ifdef MPFS_AMP_MEM_BASE
+#if (MPFS_AMP_MEM_SIZE) == 0
+#error MPFS_AMP_MEM_SIZE must be non-zero
+#endif
+    /* HSS passes the payload no dtb and does not fence another domain's
+     * memory off from it, so the OS learns of the AMP hart's region here. */
+    ret = fdt_add_mem_rsv(&ctx, (uint64_t)MPFS_AMP_MEM_BASE,
+                          (uint64_t)MPFS_AMP_MEM_SIZE);
+    if (ret != 0) {
+        /* Linux would overwrite the running AMP image. */
+        wolfBoot_printf("FDT: Failed to reserve AMP memory (%d)\n", ret);
+        wolfBoot_panic();
+    }
+    wolfBoot_printf("FDT: Reserved AMP memory 0x%lx, size 0x%lx\n",
+        (unsigned long)MPFS_AMP_MEM_BASE, (unsigned long)MPFS_AMP_MEM_SIZE);
+#endif
+#ifdef MPFS_AMP_HART
+    /* Keeps Linux from trying to start the AMP hart through SBI HSM. */
+    off = fdt_find_node_offset(&ctx, -1, MPFS_AMP_CPU_NODE);
+    if (off >= 0) {
+        ret = fdt_fixup_str(&ctx, off, MPFS_AMP_CPU_NODE, "status",
+                            "disabled");
+    }
+    if (off < 0 || ret != 0) {
+        wolfBoot_printf("FDT: Failed to disable %s\n", MPFS_AMP_CPU_NODE);
+    }
+#endif
 
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT) && \
     (!defined(MPFS_WDT_NODES_KEEP) || defined(MPFS_SCB_SMODE_DENY))
@@ -1421,10 +1532,21 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
  * fixups above. */
 int hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
+    int ret;
+
     if (dts_addr == NULL) {
         return -1;
     }
-    return mpfs_dts_fixup_inplace(dts_addr, capacity);
+    ret = mpfs_dts_fixup_inplace(dts_addr, capacity);
+#ifdef MPFS_AMP_MEM_BASE
+    /* A pass that gave up before the reservation leaves the AMP image
+     * unprotected, so it must not boot. */
+    if (ret != 0) {
+        wolfBoot_printf("FDT: AMP memory not reserved\n");
+        wolfBoot_panic();
+    }
+#endif
+    return ret;
 }
 
 void hal_prepare_boot(void)
@@ -1488,9 +1610,12 @@ static int mpfs_scb_wait_clear(uint32_t reg_offset, uint32_t mask,
 }
 
 /* A refresh above MVRP is the forbidden window and resets the chip, so each
- * watchdog is tested: under a supervisor that owns the window, every one is. */
+ * watchdog is tested.  An S-mode build with MPFS_WDT_NODES_KEEP refreshes
+ * none: the first write locks TIME, MVRP and TRIGGER until reset, and the OS
+ * watchdog driver has to program them at probe. */
 void mpfs_wdt_pet_all(void)
 {
+#if defined(WOLFBOOT_RISCV_MMODE) || !defined(MPFS_WDT_NODES_KEEP)
     unsigned long b;
     unsigned int i;
 
@@ -1500,6 +1625,7 @@ void mpfs_wdt_pet_all(void)
             MSS_WDT_REFRESH(b) = 0xDEADC0DEU;
         }
     }
+#endif
 }
 
 #if defined(EXT_FLASH) || defined(MPFS_SBI_SC_FLASH)

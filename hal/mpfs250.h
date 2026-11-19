@@ -463,6 +463,10 @@ typedef struct {
 #define MPFS_FIRST_U54_HART         1   /* First U54 is hart 1 */
 #define MPFS_LAST_U54_HART          4   /* Last U54 is hart 4 */
 
+/* L2 LIM left by WAY_ENABLE=0x0B: ways 12-15, 512 KB */
+#define MPFS_L2_LIM_BASE            0x08000000UL
+#define MPFS_L2_LIM_SIZE            0x00080000UL
+
 /* Stack configuration per hart */
 #ifndef STACK_SIZE_PER_HART
 #define STACK_SIZE_PER_HART         8192
@@ -785,6 +789,22 @@ int mpfs_pdma_memcpy(void *dst, const void *src, uint32_t bytes);
  * unconditionally in hal/mpfs250.c: the SDHCI and QSPI-programmer callers
  * exist in the S-mode builds too, where MPFS_DDR_INIT is not set. */
 void mpfs_wdt_pet_all(void);
+
+#ifdef MPFS_AMP_HART
+#define MPFS_AMP_STR_(x)    #x
+#define MPFS_AMP_STR(x)     MPFS_AMP_STR_(x)
+#define MPFS_AMP_CPU_NODE   "cpu@" MPFS_AMP_STR(MPFS_AMP_HART)
+
+/* hal_smode_boot() zeroes the whole L2 LIM after the AMP image is loaded. */
+#if (MPFS_AMP_MEM_BASE < MPFS_L2_LIM_BASE + MPFS_L2_LIM_SIZE) && \
+    (MPFS_AMP_MEM_BASE + MPFS_AMP_MEM_SIZE > MPFS_L2_LIM_BASE)
+#error "MPFS_AMP_MEM_BASE/MPFS_AMP_MEM_SIZE must not overlap the L2 LIM"
+#endif
+
+/* Load the AMP image from the verified FIT into MPFS_AMP_MEM_BASE for
+ * MPFS_AMP_HART to run in M-mode.  0 on success. */
+int mpfs_amp_load(void *fit);
+#endif
 #endif /* __ASSEMBLER__ */
 
 #if defined(EXT_FLASH) || defined(MPFS_SBI_SC_FLASH)

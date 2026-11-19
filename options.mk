@@ -313,9 +313,50 @@ ifeq ($(MPFS_SC_PROBE),1)
 endif
 
 # Leave the MSS watchdog nodes in the dtb and stop the parked E51 refreshing them, so the OS owns
-# the watchdogs after the hand-off and must service them itself.
+# the watchdogs after the hand-off and must service them itself. An S-mode build under HSS then
+# never refreshes them, so the OS driver can still program them at probe.
 ifeq ($(MPFS_WDT_NODES_KEEP),1)
     CFLAGS+=-D"MPFS_WDT_NODES_KEEP"
+endif
+
+# Memory owned by a hart outside the OS (an HSS AMP payload, e.g. bare metal on
+# U54_4): reserved in the kernel dtb so Linux never allocates it.
+ifneq ($(MPFS_AMP_MEM_BASE),)
+    ifeq ($(MPFS_AMP_MEM_SIZE),)
+        $(error MPFS_AMP_MEM_BASE needs MPFS_AMP_MEM_SIZE)
+    endif
+    CFLAGS+=-DMPFS_AMP_MEM_BASE=$(MPFS_AMP_MEM_BASE)
+    CFLAGS+=-DMPFS_AMP_MEM_SIZE=$(MPFS_AMP_MEM_SIZE)
+endif
+ifneq ($(MPFS_AMP_MEM_SIZE),)
+    ifeq ($(MPFS_AMP_MEM_BASE),)
+        $(error MPFS_AMP_MEM_SIZE needs MPFS_AMP_MEM_BASE)
+    endif
+endif
+
+# M-mode: start a bare-metal image from the FIT on one U54 (an AMP hart) beside
+# Linux.  The image is loaded at MPFS_AMP_MEM_BASE and entered in M-mode.
+ifneq ($(MPFS_AMP_HART),)
+    ifneq ($(RISCV_MMODE),1)
+        $(error MPFS_AMP_HART needs the M-mode target (RISCV_MMODE=1))
+    endif
+    ifeq ($(MPFS_AMP_MEM_BASE),)
+        $(error MPFS_AMP_HART needs MPFS_AMP_MEM_BASE and MPFS_AMP_MEM_SIZE)
+    endif
+    ifeq ($(MPFS_WDT_NODES_KEEP),1)
+        $(error MPFS_AMP_HART needs the E51 to keep refreshing the watchdogs; drop MPFS_WDT_NODES_KEEP)
+    endif
+    ifneq ($(DISK_SDCARD),1)
+        ifneq ($(DISK_EMMC),1)
+            $(error MPFS_AMP_HART loads its image from the FIT on SD or eMMC (DISK_SDCARD=1 or DISK_EMMC=1))
+        endif
+    endif
+    ifeq ($(filter 2 3 4,$(MPFS_AMP_HART)),)
+        $(error MPFS_AMP_HART must be 2, 3 or 4: hart 0 is the E51 and Linux boots on hart 1)
+    endif
+    MPFS_AMP_IMAGE?=fwtpm-1
+    CFLAGS+=-DMPFS_AMP_HART=$(MPFS_AMP_HART)
+    CFLAGS+=-DMPFS_AMP_IMAGE='"$(MPFS_AMP_IMAGE)"'
 endif
 
 # PUF-derived KEK + RFC 3394 AES key-wrap for sNVM-stored keys.
