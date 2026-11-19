@@ -2222,7 +2222,7 @@ int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
 extern uint8_t _end[];  /* linker symbol: end of wolfBoot BSS */
 #endif
-static uint8_t dec_hdr[IMAGE_HEADER_SIZE];
+static uint8_t dec_hdr[IMAGE_HEADER_SIZE] XALIGNED(4);
 
 static int decrypt_header(uint8_t *src)
 {
@@ -2407,7 +2407,7 @@ static uint8_t* wolfBoot_get_image_from_part(uint8_t part)
 uint8_t* wolfBoot_get_self_header(void)
 {
 #if defined(EXT_FLASH) && defined(WOLFBOOT_SELF_HEADER_EXT)
-    static uint8_t hdr_buf[IMAGE_HEADER_SIZE];
+    static uint8_t hdr_buf[IMAGE_HEADER_SIZE] XALIGNED(4);
     uint32_t       magic;
 
 #ifdef NVM_FLASH_ECC
