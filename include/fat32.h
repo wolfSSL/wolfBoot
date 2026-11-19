@@ -121,6 +121,8 @@ int fat32_mount(struct fs_volume *vol);
 int fat32_open(struct fs_volume *vol, struct fs_file *f, const char *path,
                uint64_t max_size);
 int fat32_read(struct fs_file *f, uint64_t off, uint64_t len, uint8_t *buf);
+int fat32_map(struct fs_file *f, uint64_t off, uint32_t len,
+              uint64_t *part_off);
 int fat32_label_eq(struct fs_volume *vol, const char *label);
 
 #endif /* WOLFBOOT_FAT32_H */

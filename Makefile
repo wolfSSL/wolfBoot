@@ -515,6 +515,11 @@ ifeq ($(TARGET),imx8mm)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+# S32G2 runs from SRAM and boots a signed FIT; there is no factory.bin.
+ifeq ($(TARGET),s32g2)
+    MAIN_TARGET:=wolfboot.bin
+endif
+
 # i.MX95 M7 runs from ITCM (loaded by the Linux remoteproc driver); the payload
 # lives in DDR at 0x80100000, so there is no contiguous flash image to assemble.
 ifeq ($(TARGET),imx95_m7)
@@ -1101,6 +1106,14 @@ secondary: $(SECONDARY_PRIVATE_KEY)
 %.o:%.c
 	@echo "\t[CC $(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
+
+# hal/s32g2_ddr.o links the DDR blob in by content: always rebuilt, since
+# make sees neither a removed blob nor a changed S32G2_DDR_BLOB path.
+ifeq ($(TARGET),s32g2)
+hal/s32g2_ddr.o: hal/s32g2_ddr.c FORCE
+	@echo "\t[CC $(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+endif
 
 %.o:%.S
 	@echo "\t[AS $(ARCH)] $@"

@@ -775,6 +775,45 @@ int fat32_read(struct fs_file *f, uint64_t off, uint64_t len, uint8_t *buf)
     return (int)done;
 }
 
+int fat32_map(struct fs_file *f, uint64_t off, uint32_t len,
+              uint64_t *part_off)
+{
+    struct fs_volume *vol = f->vol;
+    struct fat32_volume *fv = &vol->u.fat;
+    uint64_t covered;
+    uint32_t in_clus, clus, next;
+    int ret;
+
+    ret = fat32_seek(f, off);
+    if (ret != WOLFBOOT_FS_OK) {
+        return ret;
+    }
+    clus = f->cur_clus;
+    in_clus = (uint32_t)(off % (uint64_t)fv->clus_sz);
+
+    /* A range that runs past this cluster is one run on the media only if
+     * every following link is the physically next cluster. */
+    covered = (uint64_t)fv->clus_sz - in_clus;
+    while (covered < (uint64_t)len) {
+        ret = fat32_next_clus(vol, clus, &next);
+        if (ret < 0) {
+            return ret;
+        }
+        if (ret == 1) {
+            return WOLFBOOT_FS_E_CORRUPT;
+        }
+        if (next != (clus + 1U)) {
+            return WOLFBOOT_FS_E_UNSUPPORTED;
+        }
+        clus = next;
+        covered += (uint64_t)fv->clus_sz;
+    }
+
+    *part_off = fv->data_off +
+        (((uint64_t)f->cur_clus - 2U) * (uint64_t)fv->clus_sz) + in_clus;
+    return WOLFBOOT_FS_OK;
+}
+
 int fat32_label_eq(struct fs_volume *vol, const char *label)
 {
     char vl[FAT_BS_VOL_LAB_LEN + 1];

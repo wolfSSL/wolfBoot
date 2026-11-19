@@ -347,7 +347,8 @@ static void print_usage(const char* prog_name)
     wolfBoot_printf("\nOptions:\n");
     wolfBoot_printf("  --dev <path>        - Operate on this backing store instead of the\n");
     wolfBoot_printf("                        image built in. With a disk boot slot's\n");
-    wolfBoot_printf("                        partition device, \"status\", \"stage\" and\n");
+    wolfBoot_printf("                        partition device, or its image file on a\n");
+    wolfBoot_printf("                        mounted filesystem, \"status\", \"stage\" and\n");
     wolfBoot_printf("                        \"success\" act on that slot's own tail.\n");
     wolfBoot_printf("\nPartitions:\n");
     wolfBoot_printf("  BOOT                - Currently running firmware partition\n");

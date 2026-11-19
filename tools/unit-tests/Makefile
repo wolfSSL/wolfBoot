@@ -197,6 +197,8 @@ TESTS+=unit-rp2350-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
 TESTS+=unit-fdt-memrsv-wrap
+TESTS+=unit-psci
+TESTS+=unit-s32g2-nor-update
 TESTS+=unit-fdt-addr32
 TESTS+=unit-ns16550
 TESTS+=unit-zynq-dma-range
@@ -232,7 +234,8 @@ TESTS+=unit-p1021-qe-firmware
 TESTS+=unit-t10xx-dts-memac
 TESTS+=unit-fs-probe
 TESTS+=unit-fs-malicious
-TESTS+=unit-update-disk-fs unit-update-disk-fs-enc
+TESTS+=unit-update-disk-fs unit-update-disk-fs-enc unit-update-disk-fs-confirm \
+       unit-update-disk-fs-confirm-fdt
 
 # The filesystem interop tests build their fixtures with the host's real
 # mkfs tools, so they are only added when those tools exist. The hostile
@@ -391,6 +394,8 @@ unit-flash-is-erased-invert:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH \
 # Journal tests use 4 KB sectors, because the log must hold a full-partition
 # update
 unit-nvm-journal:CFLAGS+=-DNVM_FLASH_JOURNAL -DMOCK_PARTITIONS \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256
+unit-s32g2-nor-update:CFLAGS+=-DNVM_FLASH_JOURNAL -DMOCK_PARTITIONS \
 	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256
 unit-nvm-journal-ecc:CFLAGS+=-DNVM_FLASH_JOURNAL -DNVM_FLASH_ECC -DMOCK_PARTITIONS \
 	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256 \
@@ -640,6 +645,18 @@ unit-update-disk-fs-enc:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA -DHAVE_CHACHA \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
 	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-disk-fs-confirm:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
+	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 -DMAX_DISKS=1 \
+	-DWOLFBOOT_DISK_FS -DWOLFBOOT_FAT32 -DWOLFBOOT_EXT4 \
+	-DDISK_BOOT_CONFIRM \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-disk-fs-confirm-fdt:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
+	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 -DMAX_DISKS=1 \
+	-DWOLFBOOT_DISK_FS -DWOLFBOOT_FAT32 -DWOLFBOOT_EXT4 \
+	-DDISK_BOOT_CONFIRM -DWOLFBOOT_FDT \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-disk-fs:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 -DMAX_DISKS=1 \
 	-DWOLFBOOT_DISK_FS -DWOLFBOOT_FAT32 -DWOLFBOOT_EXT4 \
@@ -878,6 +895,9 @@ unit-store-sbrk: unit-store-sbrk.c ../../src/store_sbrk.c
 
 unit-string: ../../include/target.h unit-string.c
 	gcc -o $@ $^ $(CFLAGS) -DDEBUG_UART -DPRINTF_ENABLED $(LDFLAGS)
+
+unit-psci: ../../include/target.h unit-psci.c ../../src/psci.c
+	gcc -o $@ unit-psci.c $(CFLAGS) $(LDFLAGS)
 
 unit-arm-tee-psa-ipc: ../../include/target.h unit-arm-tee-psa-ipc.c ../../src/arm_tee_psa_ipc.c
 	gcc -o $@ unit-arm-tee-psa-ipc.c $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa \
@@ -1237,6 +1257,10 @@ unit-flash-is-erased-invert: ../../include/target.h unit-flash-is-erased.c
 unit-nvm-journal: ../../include/target.h unit-nvm-journal.c ../../src/libwolfboot.c
 	gcc -o $@ unit-nvm-journal.c ../../src/libwolfboot.c $(CFLAGS) $(LDFLAGS)
 
+unit-s32g2-nor-update: ../../include/target.h unit-s32g2-nor-update.c \
+		../../src/libwolfboot.c ../scripts/s32g2/s32g2-nor-update.py
+	gcc -o $@ unit-s32g2-nor-update.c ../../src/libwolfboot.c $(CFLAGS) $(LDFLAGS)
+
 unit-nvm-journal-ecc: ../../include/target.h unit-nvm-journal.c ../../src/libwolfboot.c
 	gcc -o $@ unit-nvm-journal.c ../../src/libwolfboot.c $(CFLAGS) $(LDFLAGS)
 
@@ -1552,6 +1576,17 @@ unit-update-disk-fs: ../../include/target.h unit-update-disk-fs.c
 # file's byte stream lines up with the CTR counter exactly as a raw
 # partition's does -- a wrong IV or offset would decrypt to garbage.
 unit-update-disk-fs-enc: ../../include/target.h unit-update-disk-fs.c
+	gcc -o $@ unit-update-disk-fs.c $(CFLAGS) $(LDFLAGS)
+
+# Same source with boot confirmation compiled in: the trailer of a file slot
+# is the tail of its image file, located through the filesystem and rewritten
+# in place.
+unit-update-disk-fs-confirm: ../../include/target.h unit-update-disk-fs.c
+	gcc -o $@ unit-update-disk-fs.c $(CFLAGS) $(LDFLAGS)
+
+# Boot confirmation with the device tree code compiled in: the /chosen
+# properties that name the booted slot, written through the real src/fdt.c.
+unit-update-disk-fs-confirm-fdt: ../../include/target.h unit-update-disk-fs.c
 	gcc -o $@ unit-update-disk-fs.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-disk-fit: ../../include/target.h unit-update-disk-fit.c

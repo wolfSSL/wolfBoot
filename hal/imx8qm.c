@@ -1140,6 +1140,12 @@ int hal_dts_fixup(void* dts_addr, uint32_t capacity)
         wolfBoot_printf("FDT: bootargs fixup failed (%d)\n", ret);
         return ret;
     }
+#ifdef WOLFBOOT_UPDATE_DISK
+    ret = wolfBoot_disk_dts_fixup(&ctx);
+    if (ret != 0) {
+        return ret;
+    }
+#endif
 
     /* Opt-in "no-1-8-v" plus a clock cap for a path that cannot carry UHS-I, such as an SD
      * multiplexer. Off by default. The eMMC node is untouched; it needs 1.8V for HS200/400. */
