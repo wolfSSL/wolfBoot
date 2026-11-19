@@ -16,7 +16,7 @@ requires no changes to the core build system or HAL shim.
 The integration uses wolfHAL's **direct API mapping** feature. Each platform
 driver source provides an optional `#ifdef` block that renames its driver
 functions to the top-level API names. When the corresponding
-`WHAL_CFG_<TYPE>_API_MAPPING_<VARIANT>` flag is defined, the driver file
+`WHAL_CFG_<DRIVER>_DIRECT_API_MAPPING` flag is defined, the driver file
 itself provides the definition of the top-level API — no wrapper, no vtable
 indirection, no runtime null-check. Calling `whal_Flash_Write(&dev, ...)` links
 directly to the platform driver's implementation.
@@ -35,7 +35,7 @@ The integration consists of four parts:
    - `wolfHAL_board.c` — device instances (clock, flash, GPIO, UART),
      configuration structs, and `hal_init`/`hal_prepare_boot` implementations.
    - `board.mk` — build variables (`ARCH_FLASH_OFFSET`, `LSCRIPT_IN`, the
-     `WHAL_CFG_*_API_MAPPING_*` flags, wolfHAL driver objects, `RAM_CODE`
+     `WHAL_CFG_*_DIRECT_API_MAPPING` flags, wolfHAL driver objects, `RAM_CODE`
      linker rules).
 
 3. **Generic test application** (`test-app/app_wolfhal.c`) — demonstrates using
@@ -48,7 +48,7 @@ The integration consists of four parts:
 ### How It Fits Together
 
 ```
-config/examples/<chip>_wolfhal_<board>.config
+config/examples/<name>.config
   └─ TARGET=<chip>  BOARD=<board>  WOLFHAL=1
 
 arch.mk
@@ -65,10 +65,10 @@ hal/wolfhal.c  (generic — calls whal_Flash_Write, whal_Uart_Send, etc.)
 hal/boards/<board>/
   ├─ wolfHAL_board.h  (includes wolfHAL driver headers, pin enums)
   ├─ wolfHAL_board.c  (device instances, hal_init, hal_prepare_boot)
-  └─ board.mk         (WHAL_CFG_*_API_MAPPING_*, driver objects, RAM_CODE rules)
+  └─ board.mk         (API mapping flags, driver objects, RAM_CODE rules)
 ```
 
-The `WHAL_CFG_*_API_MAPPING_*` flags cause each wolfHAL driver source to emit
+The `WHAL_CFG_*_DIRECT_API_MAPPING` flags make each wolfHAL driver source emit
 its functions under the top-level API name. Since only one driver source per
 device type is compiled, there is no conflict — and since no dispatch source
 (e.g., `src/flash/flash.c`) is included, there is no vtable indirection. The
@@ -89,7 +89,8 @@ WOLFHAL=1
   (`hal/wolfhal.c`) and includes the per-board build pieces.
 - `BOARD` selects the board directory under `hal/boards/`.
 
-See `config/examples/*_wolfhal_*.config` for complete examples.
+See `config/examples/stm32wba.config` and
+`config/examples/versal2_vek385.config` for complete examples.
 
 ## Adding a New Board
 
@@ -188,10 +189,9 @@ ARCH_FLASH_OFFSET=0x08000000
 LSCRIPT_IN=hal/<family>.ld
 
 # Bind wolfHAL driver sources directly to the top-level API symbols.
-CFLAGS+=-DWHAL_CFG_CLOCK_API_MAPPING_<FAMILY>
-CFLAGS+=-DWHAL_CFG_FLASH_API_MAPPING_<FAMILY>
-CFLAGS+=-DWHAL_CFG_GPIO_API_MAPPING_<FAMILY>
-CFLAGS+=-DWHAL_CFG_UART_API_MAPPING_<FAMILY>
+CFLAGS+=-DWHAL_CFG_<FAMILY>_FLASH_DIRECT_API_MAPPING
+CFLAGS+=-DWHAL_CFG_<FAMILY>_GPIO_DIRECT_API_MAPPING
+CFLAGS+=-DWHAL_CFG_<FAMILY>_UART_DIRECT_API_MAPPING
 
 WOLFHAL_OBJS+=$(WOLFHAL_ROOT)/src/clock/<family>_rcc.o
 WOLFHAL_OBJS+=$(WOLFHAL_ROOT)/src/flash/<family>_flash.o
@@ -214,7 +214,7 @@ Only one API mapping flag may be active per device type per build.
 
 ### 4. Config File
 
-Create `config/examples/<chip>_wolfhal_<board_name>.config`:
+Create `config/examples/<name>.config`:
 
 ```
 TARGET=<chip>
@@ -232,6 +232,29 @@ NVM_FLASH_WRITEONCE=1
 
 Adjust partition addresses and sector sizes for your board's flash layout. Optionally
 add `DEBUG_UART=1` to enable UART debug output.
+
+## External Flash and Other Board Options
+
+`hal/wolfhal.c` reads these optional handles and flags from the board:
+
+- `BOARD_EXT_FLASH_DEV` (with `EXT_FLASH=1`): a `whal_Flash` device for the
+  external flash. `hal/wolfhal.c` implements `ext_flash_read`,
+  `ext_flash_write`, `ext_flash_erase`, `ext_flash_lock` and
+  `ext_flash_unlock` on it. Program and erase are refused unless they fit
+  fully inside a BOOT, UPDATE or SWAP partition that is in the external
+  flash (`PART_BOOT_EXT`, `PART_UPDATE_EXT`, `PART_SWAP_EXT`), so other
+  data there (for example an earlier boot stage's image) is never changed.
+  `tools/unit-tests/unit-wolfhal-ext-flash.c` tests this code.
+- `BOARD_FLASH_DEV`: leave it undefined on a board with no internal flash.
+  `hal_flash_write` and `hal_flash_erase` then fail, and all partitions must
+  be in the external flash.
+- `WOLFHAL_UART_CRLF` (in `board.mk`): `uart_write` sends `'\n'` as
+  `"\r\n"`.
+
+The AMD VEK385 (`hal/boards/vek385`, `TARGET=versal2`, Cortex-A78AE) uses
+all three: its OSPI flash is a wolfHAL NOR flash on a SPI memory controller,
+and the target keeps its own test application (`app_versal2.c`) in place of
+`app_wolfhal.c`.
 
 ## RAM_CODE
 

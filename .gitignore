@@ -549,6 +549,11 @@ tools/unit-tests/unit-t2080-fman-loader
 tools/unit-tests/unit-ti-hercules-write
 tools/unit-tests/unit-versal-ext-write
 tools/unit-tests/unit-versal-qspi-dma
+tools/unit-tests/unit-wolfhal-ext-flash
+tools/unit-tests/unit-wolfhal-ext-flash-intboot
+tools/unit-tests/unit-wolfhal-ext-flash-intswap
+tools/unit-tests/unit-wolfhal-uart-flash
+tools/unit-tests/unit-wolfhal-uart-flash-intflash
 tools/unit-tests/unit-xspi-tfd-index
 tools/unit-tests/unit-zynq-erase-loop
 tools/unit-tests/unit-zynq-ext-write
@@ -577,6 +582,8 @@ tools/unit-tests/versal_ext_write_extract.h
 tools/unit-tests/versal_host.c
 tools/unit-tests/versal_host.h
 tools/unit-tests/versal_qspidev_extract.h
+tools/unit-tests/wolfhal_ext_flash_extract.h
+tools/unit-tests/wolfhal_uart_flash_extract.h
 tools/unit-tests/zynq_erase_extract.h
 tools/unit-tests/zynq_write_extract.h
 tools/unit-tests/unit-sign-header-failure

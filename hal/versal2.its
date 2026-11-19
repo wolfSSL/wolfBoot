@@ -1,0 +1,56 @@
+/dts-v1/;
+
+/* FIT for config/examples/versal2_vek385_linux.config. Image.gz, kernel.dtb
+ * and initramfs.cpio.gz are read from the wolfBoot directory. */
+/ {
+    description = "AMD Versal Gen 2 VEK385 - wolfBoot Linux";
+    #address-cells = <1>;
+
+    images {
+        kernel-1 {
+            description = "Linux Kernel";
+            data = /incbin/("../Image.gz");
+            type = "kernel";
+            arch = "arm64";
+            os = "linux";
+            compression = "gzip";
+            load = <0x24000000>;
+            entry = <0x24000000>;
+            hash-1 {
+                algo = "sha256";
+            };
+        };
+        /* No load address: wolfBoot copies it to WOLFBOOT_LOAD_DTS_ADDRESS. */
+        fdt-1 {
+            description = "Board DTB (tools/scripts/versal2/mk_board_dtb.sh)";
+            data = /incbin/("../kernel.dtb");
+            type = "flat_dt";
+            arch = "arm64";
+            compression = "none";
+            hash-1 {
+                algo = "sha256";
+            };
+        };
+        ramdisk-1 {
+            description = "initramfs";
+            data = /incbin/("../initramfs.cpio.gz");
+            type = "ramdisk";
+            arch = "arm64";
+            os = "linux";
+            compression = "gzip";
+            load = <0x30000000>;
+            hash-1 {
+                algo = "sha256";
+            };
+        };
+    };
+    configurations {
+        default = "conf1";
+        conf1 {
+            description = "Linux kernel, DTB and initramfs";
+            kernel = "kernel-1";
+            fdt = "fdt-1";
+            ramdisk = "ramdisk-1";
+        };
+    };
+};

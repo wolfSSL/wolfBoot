@@ -61,8 +61,9 @@ static const whal_Stm32wba_Rcc_PeriphClk g_periphClks[] = {
 
 static void set_vos_range1(void)
 {
-    whal_Reg_Update(PWR_BASE, PWR_VOSR_REG, PWR_VOSR_VOS_Msk, PWR_VOSR_VOS_Msk);
-    while (!(whal_Reg_Read(PWR_BASE, PWR_VOSR_REG) & PWR_VOSR_VOSRDY_Msk))
+    whal_Reg32_Update(PWR_BASE, PWR_VOSR_REG, PWR_VOSR_VOS_Msk,
+                      PWR_VOSR_VOS_Msk);
+    while (!(whal_Reg32_Read(PWR_BASE, PWR_VOSR_REG) & PWR_VOSR_VOSRDY_Msk))
         ;
 }
 

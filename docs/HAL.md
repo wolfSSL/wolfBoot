@@ -39,7 +39,10 @@ If the IAP interface of the flash memory of the target requires it, this functio
 is called before every write and erase operations to unlock write access to the
 flash. On some targets, this function may be empty.
 
-`int hal_flash_write(uint32_t address, const uint8_t *data, int len)`
+`int hal_flash_write(haladdr_t address, const uint8_t *data, int len)`
+
+`haladdr_t` is `uint32_t`, or `uintptr_t` on 64-bit targets
+(`include/hal.h`).
 
 This function provides an implementation of the flash write function, using the
 target's IAP interface. `address` is the offset from the beginning of the
@@ -57,7 +60,7 @@ If the IAP interface of the flash memory requires locking/unlocking, this functi
 restores the flash write protection by excluding write accesses. This function is called
 by the bootloader at the end of every write and erase operations.
 
-`int hal_flash_erase(uint32_t address, int len)`
+`int hal_flash_erase(haladdr_t address, int len)`
 
 Called by the bootloader to erase part of the flash memory to allow subsequent boots.
 Erase operations must be performed via the specific IAP interface of the target microcontroller.

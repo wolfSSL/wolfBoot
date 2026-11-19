@@ -83,6 +83,7 @@ This README describes configuration of supported targets.
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
 * [Xilinx Zynq-7000 (ZC702)](#xilinx-zynq-7000-zc702)
 * [Versal Gen 1 VMK180](#versal-gen-1-vmk180)
+* [Versal Gen 2 VEK385](#versal-gen-2-vek385)
 
 ## STM32F4
 
@@ -5011,6 +5012,141 @@ sudo fdisk -l /dev/sdX
 | QSPI32    | 0 0 1 0       | on, on, off, on |
 | SD1       | 1 1 1 0       | off, off, off, on |
 
+
+## Versal Gen 2 VEK385
+
+AMD Versal AI Edge / Prime Gen 2 (VEK385) evaluation kit, Cortex-A78AE.
+`TARGET=versal2` is a wolfHAL board (`WOLFHAL=1 BOARD=vek385`, see
+[wolfHAL Integration](wolfHAL.md)): the UART and OSPI flash drivers come
+from `lib/wolfHAL`. Tested on a VEK385 Rev B with Vitis 2026.1.
+
+wolfBoot replaces U-Boot in the Versal boot flow and runs from DDR at
+`0x40000000`:
+
+```
+PLM -> BL31 (EL3) -> wolfBoot (EL2) -> application or Linux (EL2)
+```
+
+It verifies the signed images in the OSPI flash and boots the one with the
+higher version, from BOOT or UPDATE, in place (A/B). The application starts
+at EL2; build with `BOOT_EL1=1` to start it at EL1. Linux on the board must
+stay at EL2.
+
+### Flash layout
+
+Micron MT35XU02G, 256 MB, on the OSPI interface:
+
+| Partition | Size   | Address | Description |
+|-----------|--------|---------|-------------|
+| BOOT.BIN  | 8 MB   | 0x15C0000 | boot image slot at the start of Bank A |
+| BOOT      | 44 MB  | 0x1DC0000 | Boot partition |
+| UPDATE    | 44 MB  | 0x49C0000 | Update partition |
+| DTS boot  | 1 MB   | 0x7600000 | standalone DTB slot |
+| DTS update| 1 MB   | 0x7E00000 | standalone DTB slot |
+| SWAP      | 128 KB | 0xFA40000 | reserved; not used in this boot mode |
+
+wolfBoot only programs and erases inside BOOT, UPDATE and SWAP
+(`hal/wolfhal.c`). It never writes the rest of the flash.
+
+### Build
+
+```sh
+git submodule update --init
+cp config/examples/versal2_vek385.config .config
+make clean TARGET=versal2
+make TARGET=versal2
+```
+
+This makes `wolfboot.elf` and the signed test app
+`test-app/image_v1_signed.bin`. Use
+`config/examples/versal2_vek385_linux.config` to boot Linux.
+
+### Boot image
+
+wolfBoot runs after TF-A (BL31). Build upstream TF-A; AMD's prebuilt TF-A
+starts OP-TEE first and cannot be used:
+
+```sh
+git clone https://github.com/ARM-software/arm-trusted-firmware.git
+cd arm-trusted-firmware
+git checkout da5a281eeb92
+make PLAT=versal2 RESET_TO_BL31=1 CROSS_COMPILE=aarch64-linux-gnu- \
+     MEM_BASE=0x1600000 MEM_SIZE=0x200000 bl31
+```
+
+Get AMD's `base-design.pdi` and `cortexa78-linux.dtb` from
+`github.com/Xilinx/soc-prebuilt-firmware` (branch `xlnx_rel_v2026.1`, folder
+`vek385-versal_2ve_2vm`). Put them in one folder with TF-A's
+`build/versal2/release/bl31/bl31.elf`, `wolfboot.elf` and
+`tools/scripts/versal2/versal2_boot.bif`, name the DTB `system.dtb`, and
+build the boot image there:
+
+```sh
+bootgen -arch versal_2ve_2vm -image versal2_boot.bif -w -o boot.pdi
+```
+
+### Run the test app (JTAG)
+
+Set boot mode JTAG (SW1 = `0000`). Write the signed test app to BOOT with
+AMD's `program_flash`, then load the boot image:
+
+```sh
+program_flash -f test-app/image_v1_signed.bin -offset 0x1DC0000 \
+    -pdi base-design.pdi -flash_type ospi-x8-single -verify
+xsdb tools/scripts/versal2/program_jtag.tcl boot.pdi
+```
+
+wolfBoot and the test app print on UART1, the second FT4232 port
+(interface B), at 115200 8N1. Load `boot.pdi` again after each
+`program_flash`.
+
+To test an update, build and sign the test app as version 2 and write
+`test-app/image_v2_signed.bin` to UPDATE (`-offset 0x49C0000`):
+
+```sh
+make -C test-app clean TARGET=versal2 WOLFBOOT_VERSION=2
+make -C test-app TARGET=versal2 WOLFBOOT_VERSION=2
+tools/keytools/sign --ecc384 --sha384 test-app/image.elf \
+    wolfboot_signing_private_key.der 2
+```
+
+### Boot from the OSPI flash
+
+Write `boot.pdi` to the flash and set boot mode OSPI (SW1 = `0001`):
+
+```sh
+program_flash -f boot.pdi -offset 0 -pdi base-design.pdi \
+    -flash_type ospi-x8-single -verify
+```
+
+Offset 0 is for a flash without AMD's boot images. On a flash with AMD's
+Image Selector, write it to the start of Bank A instead
+(`-offset 0x15C0000`; not tested with AMD's Image Selector).
+
+### Boot Linux
+
+1. Build wolfBoot with `config/examples/versal2_vek385_linux.config` and
+   build `boot.pdi` again with the new `wolfboot.elf`.
+2. Make the kernel DTB from AMD's DTB:
+   `tools/scripts/versal2/mk_board_dtb.sh cortexa78-linux.dtb kernel.dtb`.
+3. Put `Image.gz`, `kernel.dtb` and `initramfs.cpio.gz` in the wolfBoot
+   directory, then build and sign the FIT:
+
+   ```sh
+   mkimage -f hal/versal2.its fitImage
+   tools/keytools/sign --ecc384 --sha384 fitImage \
+       wolfboot_signing_private_key.der 1
+   ```
+4. Write `fitImage_v1_signed.bin` to BOOT (`-offset 0x1DC0000`) and boot as
+   above. wolfBoot boots the higher version, so the FIT needs a higher
+   version than an image left in UPDATE.
+
+### Not yet supported
+
+- XIP, the indirect OSPI write path and the system watchdog.
+- wolfHAL timeouts: the board is built with `WHAL_CFG_NO_TIMEOUT`, so a
+  flash or UART that never answers makes wolfBoot hang.
+- High DDR for Linux: `mk_board_dtb.sh` keeps the low 2 GB only.
 
 ## Infineon PSoC 6
 
