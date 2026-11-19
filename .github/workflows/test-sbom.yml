@@ -111,6 +111,26 @@ jobs:
             --name-prefix wolfboot \
             build-sim/wolfboot-*.cdx.json build-sim/wolfboot-*.spdx.json
 
+      - name: CMake install-sbom and uninstall-sbom
+        run: |
+          stage="$PWD/stage"
+          DESTDIR="$stage" cmake --build build-sim --target install-sbom
+          docs="$(find "$stage" -type f \
+            \( -name 'wolfboot-*.cdx.json' -o -name 'wolfboot-*.spdx.json' \) \
+            | wc -l)"
+          if [ "$docs" -ne 2 ]; then
+            echo "ERROR: install-sbom did not put both documents under $stage." >&2
+            find "$stage" -type f >&2 || true
+            exit 1
+          fi
+          DESTDIR="$stage" cmake --build build-sim --target uninstall-sbom
+          left="$(find "$stage" -type f | wc -l)"
+          if [ "$left" -ne 0 ]; then
+            echo "ERROR: uninstall-sbom left files under $stage." >&2
+            find "$stage" -type f >&2
+            exit 1
+          fi
+
       - name: IAR extractor (method 7)
         run: |
           python3 tools/sbom/frontends/iar_sbom.py IDE/IAR/wolfboot.ewp \
@@ -146,16 +166,49 @@ jobs:
 
       - name: Zephyr module SBOM
         run: |
+          # No Zephyr SDK here. This stub defines the four macros
+          # zephyr/CMakeLists.txt calls and configures that file, so the
+          # front end reads the sources the module lists.
+          stub="${RUNNER_TEMP}/zephyr-stub"
+          mkdir -p "$stub"
+          cat > "$stub/CMakeLists.txt" <<'EOF'
+          cmake_minimum_required(VERSION 3.20)
+          project(wolfboot_zephyr_stub C)
+          set(CONFIG_WOLFBOOT_TEE y)
+          macro(zephyr_library)
+            add_library(wolfboot_zephyr STATIC)
+          endmacro()
+          macro(zephyr_library_sources)
+            target_sources(wolfboot_zephyr PRIVATE ${ARGN})
+          endmacro()
+          macro(zephyr_library_include_directories)
+            target_include_directories(wolfboot_zephyr PRIVATE ${ARGN})
+          endmacro()
+          macro(zephyr_library_link_libraries)
+          endmacro()
+          add_subdirectory(${WOLFBOOT_DIR}/zephyr modules/wolfboot)
+          EOF
+          cmake -S "$stub" -B "$stub/build" -G "Unix Makefiles" \
+            -DWOLFBOOT_DIR="$PWD" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           python3 tools/sbom/frontends/zephyr_sbom.py \
             --driver tools/sbom/sbom-driver \
             --name wolfboot-zephyr \
-            --cmakelists zephyr/CMakeLists.txt \
+            --compdb "$stub/build/compile_commands.json" \
+            --root "$PWD" \
             --version-file include/wolfboot/version.h \
             --version-macro LIBWOLFBOOT_VERSION_STRING \
             --cdx-out zephyr.cdx.json --spdx-out zephyr.spdx.json
           python3 tools/sbom/validate_sbom.py \
             --name-prefix wolfboot-zephyr \
             zephyr.cdx.json zephyr.spdx.json
+          for src in arm_tee_ns_interface.c arm_tee_crypto_api.c \
+              arm_tee_ps_api.c arm_tee_attest_api.c \
+              wolfboot_psa_ns_api.c wolfboot_veneers_stub.c; do
+            grep -q "$src" zephyr.cdx.json || {
+              echo "ERROR: Zephyr SBOM has no $src." >&2
+              exit 1
+            }
+          done
 
       - name: Make vs CMake equivalence (sim, advisory)
         continue-on-error: true
