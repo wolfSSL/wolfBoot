@@ -5659,6 +5659,10 @@ be added to the configuration.
 
 By default the read LUT sequence for all i.MX RT targets uses a quad read. If your flash chip does not support this feature by default, e.g. the QE-bit is disabled from the factory, it is necessary to use a single read instead. This can be accomplished by defining `CONFIG_IMX_FCB_LUT_SINGLE_READ_DATA` when compiling wolfBoot, e.g. by adding it to the `CFLAGS_EXTRA` variable in the configuration file.
 
+### Erasing by flash block
+
+The boot ROM erases a range one flash sector at a time, 4 KB on the QSPI flash chips. When `WOLFBOOT_SECTOR_SIZE` is set to the block size of the flash (64 KB), on the targets that get the flash configuration from the boot ROM (RT1040, RT1060/1061/1062, RT1064) wolfBoot erases each of its sectors with one block erase command instead, which is several times faster. This is not done when `FLASH_ERASE_UNIT` is set to a smaller size. The partitions and the swap area then have to be aligned to the block size.
+
 ### Building wolfBoot for HAB (High Assurance Boot)
 
 The `imx_rt` target supports building without a flash configuration, IVT, Boot Data and DCD. This is needed when wanting to use HAB through NXP's *Secure Provisioning Tool* to sign wolfBoot to enable secure boot. To build wolfBoot this way `TARGET_IMX_HAB` needs to be set to 1 in the configuration file (see `config/examples/imx-rt1060 _hab.config` for an example). When built with `TARGET_IMX_HAB=1` wolfBoot must be written to flash using NXP's *Secure Provisioning Tool*.
