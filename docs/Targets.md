@@ -7434,7 +7434,10 @@ The following build options are available for the S32K1xx HAL:
 | `WATCHDOG` | Enable the watchdog during wolfBoot operation. wolfBoot calls `wolfBoot_watchdog_feed()` from its hash and copy/erase loops -- a weak no-op a port overrides to service its watchdog (e.g. external MAX6316-MAX6322, see `hal/renesas-rx.c`). |
 | `WATCHDOG_TIMEOUT_MS` | Watchdog timeout in milliseconds when `WATCHDOG` is enabled (default: 1000ms). |
 | `S32K1XX_CLOCK_HSRUN` | Enable HSRUN mode (112 MHz). Requires external crystal and SPLL (not fully implemented). |
-| `DEBUG_UART` | Enable LPUART1 debug output. |
+| `S32K1XX_CLOCK_80MHZ` | Run wolfBoot at 80 MHz (RUN mode) from the external crystal through the SPLL, instead of the 48 MHz FIRC. The crystal frequency is `S32K1XX_SOSC_FREQ` (default 8 MHz). The clock is switched back before the application starts; the s32k1xx test-app switches to 80 MHz again with `s32k1xx_clock_80mhz()`. Tested on the MCXE247 only. |
+| `S32K1XX_HSRUN_SPEED_TEST` | With `S32K1XX_CLOCK_80MHZ` and the wolfIP speed test, the test-app `network` command runs in HSRUN at 112 MHz (bus 56 MHz, flash 28 MHz) with `s32k1xx_clock_hsrun()` and returns to RUN at 80 MHz with `s32k1xx_clock_run()` when the server stops, so flash writes from the console still work. Tested on the MCXE247 only. |
+| `S32K1XX_CODE_CACHE` | Enable the 4 KB LMEM code cache for flash while wolfBoot runs. It is invalidated after every flash erase and program command, and disabled before the application starts; the s32k1xx test-app enables it again with `s32k1xx_code_cache_enable()`. Tested on the MCXE247 only. |
+| `DEBUG_UART` | Enable LPUART debug output. |
 | `DEBUG_HARDFAULT` | Enable detailed hard fault debugging output. |
 | `S32K144`, `S32K146`, `S32K148` | Select variant (default is S32K142). Affects flash/SRAM size definitions. |
 | `WOLFBOOT_FOPT` | Override the Flash Option Byte (FOPT) in the Flash Configuration Field (FCF at 0x40D). Default is `0xFF`. Set via `CFLAGS_EXTRA+=-DWOLFBOOT_FOPT=0xF7` in your `.config` file. See FOPT bit field table below. |
@@ -7536,7 +7539,11 @@ The S32K1xx test application (`test-app/app_s32k1xx.c`) provides a feature-rich 
 | `trigger` | Set update flag if update image is in flash |
 | `update` | Receive firmware via XMODEM and trigger update |
 | `timestamp` | Show current system time (ms) |
+| `network` | Run the wolfIP network test |
 | `reboot` | Perform software reset |
+
+Note: `network` requires `ENABLE_WOLFIP=1` and, optionally, `WOLFIP_SPEED_TEST=1`
+or `WOLFBOOT_TEST_TFTP=1`.
 
 **UART Configuration:**
 - LPUART1: PTC7 (TX), PTC6 (RX)
@@ -7599,7 +7606,9 @@ with the S32K148 (NXP AN14731), so it uses the bare-metal `s32k1xx` HAL with the
 
 The 2 MB of flash is not contiguous: 1.5 MB of Program Flash is at `0x00000000`
 and the remaining 512 KB is FlexNVM at `0x10000000`. Only the Program Flash is
-used. The system runs at 48 MHz (FIRC). Flash cannot be programmed in HSRUN.
+used. wolfBoot runs at 80 MHz with `mcxe247.config` (48 MHz FIRC without
+`S32K1XX_CLOCK_80MHZ`). Flash cannot be programmed in HSRUN, so only the
+network speed test runs at 112 MHz.
 
 ### NXP MCXE247: Memory Layout
 
@@ -7637,44 +7646,87 @@ apply to the MCXE247, with these differences:
   the rest of the 252 KB, so an application that enables ERM interrupts must
   write its RAM before reading it. The network test app clears all of SRAM_U at
   reset (`APP_RAM_ECC_INIT`).
+- `mcxe247.config` sets `IMAGE_HEADER_SIZE=1024`, so the application starts
+  1 KB into the boot partition. The application's vector table is used in place,
+  and with 163 interrupts it must be 1 KB aligned: with the default 256-byte
+  header the core fetches the vectors of IRQ 48 and up (the ENET interrupts
+  among them) from the wrong slots.
+- `mcxe247.config` sets `S32K1XX_CLOCK_80MHZ` and `S32K1XX_CODE_CACHE`, which
+  run wolfBoot at 80 MHz from the board's 8 MHz crystal with the code cache on.
+  On the FRDM-MCXE247 this cuts the time from `wolfBoot_start` to the jump to
+  the application from about 205 ms to about 128 ms (88 KB image,
+  ECDSA P-256 with SHA-256, including the console messages). The application
+  still starts with the cache disabled and the clock on the 8 MHz SIRC
+  (`WOLFBOOT_RESTORE_CLOCK`, the default) or the 48 MHz FIRC. The test-app
+  then switches to 80 MHz and enables the cache again. SRAM_L, where the
+  network test keeps the wolfIP state, is not behind the cache (only flash
+  is cacheable).
 
 ### NXP MCXE247: Network test
 
-The test application can run a wolfIP DHCP and TFTP test over the board's
-Ethernet port. This is optional and is the only part of the port that needs the
-MCUXpresso SDK, which provides the `fsl_enet` driver. Set `ENABLE_WOLFIP=1` in
-`mcxe247.config`, check the wolfIP and SDK paths, then set the TFTP server and
-file:
+The test application can run a wolfIP throughput test or a DHCP and TFTP test
+over the board's Ethernet port. This is optional and needs a wolfIP checkout, whose
+`nxp_mcxe_enet` port is a standalone ENET and LAN8741 driver (no vendor SDK).
+The test app builds it interrupt driven (`NXP_MCXE_ENET_IRQ=1`, with ENET IRQs
+73-75 routed in `test-app/startup_arm.c`). The wolfIP stack state, with 9 KB
+TCP receive and transmit buffers per socket, is placed in SRAM_L by
+`test-app/ARM-s32k1xx-wolfip.ld`, together with the hottest code (`memcpy` and
+wolfIP's checksum loop), which the core then fetches over its code bus in
+parallel with data on the system bus. The
+rest of the app uses SRAM_U. Set
+`ENABLE_WOLFIP=1` in
+`mcxe247.config` and check the wolfIP path:
 
 ```sh
 ENABLE_WOLFIP?=1
 WOLFBOOT_LIB_WOLFIP?=../lib/wolfip
-MCUXPRESSO?=$(PWD)/../NXP/mcuxpresso-sdk/mcuxsdk
+WOLFIP_SPEED_TEST?=1
+WOLFBOOT_TEST_TFTP?=0
+```
+
+Type `network` on the console to run the test. By default
+(`WOLFIP_SPEED_TEST=1`) it acquires a DHCP lease and runs a TCP and UDP
+throughput server on port 9. Drive it from a PC on the same network
+with `<ip>` set to the address the board printed (Python 3, no extra
+packages):
+
+```sh
+python3 tools/scripts/wolfip_speed.py <ip>
+```
+
+The script runs six tests of 10 s each: TCP and UDP, each with the board
+only receiving (`rx`), only sending (`tx`) and both at once (`bidir`).
+It prints a table of the rates and UDP loss. With this build the driver also
+counts its own core cycles (`NXP_MCXE_ENET_STATS=1`), so the table also shows
+how the CPU time divides between the driver, the frame copies, wolfIP and the
+main loop. `--tests` picks a subset, `--time` sets the duration and `--rate`
+sets the UDP send rate to the board, 100 Mbit/s on the wire by default; lower
+it to find the highest rate without loss. Do not raise it above the link rate:
+a fast host (WSL can send 2 Gbit/s) queues the excess and keeps feeding it to
+the board long after the test, so the board stops answering. The board prints
+the same counters on the console after each test.
+`mcxe247.config` sets `S32K1XX_HSRUN_SPEED_TEST`, so the server runs in
+HSRUN at 112 MHz and the console returns to RUN at 80 MHz when it stops.
+Plain `nc <ip> 9` still works as a bidirectional TCP test; if `nc` sends
+nothing, the board starts sending 0.5 s after it connects. TCP clients are
+refused while a UDP test runs.
+
+Press Ctrl-C on the console to stop the server and return to the `cmd>` prompt.
+
+For the TFTP test, set `WOLFBOOT_TEST_TFTP=1` and the server and file in
+`HOST_IP_STR` and `TFTP_FILENAME`:
+
+```sh
 WOLFBOOT_TEST_TFTP?=1
 CFLAGS_EXTRA+=-DHOST_IP_STR='"192.168.50.1"' -DTFTP_FILENAME='"wolfip_test.bin"'
 ```
 
-Type `network` on the console to run the test. It acquires a DHCP lease, fetches
-the file into RAM (40 KB at most), and prints its size and checksum followed by
-`WOLFIP_TEST: PASS` or `WOLFIP_TEST: FAIL`.
-
-To measure throughput instead, set `WOLFBOOT_TEST_TFTP=0` and
-`WOLFIP_SPEED_TEST=1`. After the DHCP lease, the `network` command runs a TCP
-server on port 9 that discards what it receives and sends data whenever the
-connection can take it. It prints the receive and transmit rates when the
-connection closes. Drive it from the PC with `<ip>` set to the address the board
-printed:
-
-```sh
-# board receives
-dd if=/dev/zero bs=1460 count=10000 | nc <ip> 9
-# board sends
-nc <ip> 9 </dev/null | pv -r >/dev/null
-```
-
-The server never returns to the console; reset the board to stop it.
-`WOLFBOOT_TEST_TFTP` takes priority: with both options set to 1, the command
-runs the TFTP fetch and the speed server is never started.
+The `network` command then acquires a DHCP lease, fetches the file into RAM
+(40 KB at most), and prints its size and checksum followed by
+`WOLFIP_TEST: PASS` or `WOLFIP_TEST: FAIL`. `WOLFBOOT_TEST_TFTP` takes
+priority: with both options set to 1, the command runs the TFTP fetch and the
+speed server is never started. With both set to 0 it only acquires a DHCP
+lease.
 
 ### NXP MCXE247: Programming with Lauterbach TRACE32
 
@@ -7688,7 +7740,7 @@ example `DO <wolfBoot>/tools/scripts/mcxe247/e247_flash_factory_bin.cmm`:
 
 | Script | Purpose |
 |--------|---------|
-| `e247_debug.cmm` | Reset and halt the CPU, then load the `wolfboot.elf` and `test-app/image.elf` symbols. Takes the MCUXpresso SDK path as an optional argument, used to find the ENET driver sources (default: `../NXP/mcuxpresso-sdk/mcuxsdk` next to the checkout) |
+| `e247_debug.cmm` | Reset and halt the CPU, then load the `wolfboot.elf` and `test-app/image.elf` symbols |
 | `e247_flash_factory_bin.cmm` | Program `factory.bin`, erase the update partition and swap sector, then reset and detach |
 | `e247_flash_update.cmm` | Program `test-app/image_v2_signed.bin` into the update partition, then reset and detach |
 

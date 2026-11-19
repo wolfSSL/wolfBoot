@@ -89,6 +89,14 @@ uint64_t wolfip_test_get_ms(void)
 
     return ((uint64_t)hi << 32) | lo;
 }
+
+#ifndef DEBUG_UART
+/* No console: the network test cannot be cancelled */
+int wolfip_test_abort(void)
+{
+    return 0;
+}
+#endif
 #endif
 
 static void delay_ms(uint32_t ms)
@@ -99,12 +107,17 @@ static void delay_ms(uint32_t ms)
     }
 }
 
-static void systick_init(void)
+/* 1 ms tick from the core clock running at core_hz */
+static void systick_set(uint32_t core_hz)
 {
-    /* Configure SysTick for 1ms tick */
-    SYST_RVR = (CLOCK_SPEED / 1000) - 1;
+    SYST_RVR = (core_hz / 1000) - 1;
     SYST_CVR = 0;
     SYST_CSR = SYST_CSR_ENABLE | SYST_CSR_TICKINT | SYST_CSR_CLKSOURCE;
+}
+
+static void systick_init(void)
+{
+    systick_set(CLOCK_SPEED);
 }
 
 /* ============== LED Functions ============== */
@@ -324,7 +337,8 @@ static void print_hex(const uint8_t* buffer, uint32_t length, int dumpChars)
 
 static const char* part_state_name(uint8_t state, int state_retval)
 {
-    if (state_retval == 0) {
+    /* wolfBoot_get_partition_state() returns 0 when it read a state */
+    if (state_retval != 0) {
         return "(no trailer)";
     }
     switch (state) {
@@ -880,11 +894,45 @@ static int cmd_update(const char *args)
 }
 
 #ifdef ENABLE_WOLFIP
+/* S32K1XX_HSRUN_SPEED_TEST runs the throughput server in HSRUN at 112 MHz
+ * and returns to RUN at 80 MHz after it, before anything can write flash.
+ * The ENET driver is started inside, so it times itself at 112 MHz. */
+#if defined(S32K1XX_HSRUN_SPEED_TEST) && defined(WOLFIP_SPEED_TEST) && \
+    !defined(WOLFBOOT_TEST_TFTP)
+#ifndef S32K1XX_CLOCK_80MHZ
+#error "S32K1XX_HSRUN_SPEED_TEST needs S32K1XX_CLOCK_80MHZ"
+#endif
+#define NETWORK_TEST_HSRUN
+#endif
+
 static int cmd_network(const char *args)
 {
     (void)args;
+#ifdef NETWORK_TEST_HSRUN
+    if (s32k1xx_clock_hsrun() == 0)
+        systick_set(S32K1XX_HSRUN_CLOCK_SPEED);
+    else
+        printf("HSRUN not allowed, staying at 80 MHz\r\n");
+#endif
     wolfip_tftp_test_report();
+#ifdef NETWORK_TEST_HSRUN
+    s32k1xx_clock_run();
+    systick_set(CLOCK_SPEED);
+#endif
     return 0;
+}
+
+/* Non-zero when Ctrl-C arrived on the console. Other input is discarded. */
+int wolfip_test_abort(void)
+{
+    char c;
+    int abort = 0;
+
+    while (uart_getc(&c) > 0) {
+        if (c == 0x03)
+            abort = 1;
+    }
+    return abort;
 }
 #endif
 
@@ -986,6 +1034,14 @@ void main(void)
 
     /* Ensure FIRC clock is running at 48 MHz for UART */
     clock_ensure_firc();
+#ifdef S32K1XX_CLOCK_80MHZ
+    /* wolfBoot hands over on SIRC or FIRC: run the core at 80 MHz. The UART
+     * stays on FIRC; SysTick follows CLOCK_SPEED. */
+    s32k1xx_clock_80mhz();
+#endif
+#ifdef S32K1XX_CODE_CACHE
+    s32k1xx_code_cache_enable();
+#endif
 
 #ifdef DEBUG_UART
     /* Reinitialize UART - bootloader may have changed settings in hal_prepare_boot */
