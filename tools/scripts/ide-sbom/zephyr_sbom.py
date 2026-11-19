@@ -15,10 +15,10 @@ def with_default(argv, flag, value):
     return [*argv, flag, value]
 
 
+# The caller passes --compdb, the compile_commands.json of a west build.
 args = sys.argv[1:]
 args = with_default(args, "--name", "wolfboot-zephyr")
-args = with_default(args, "--cmakelists",
-                    os.path.join(ROOT, "zephyr", "CMakeLists.txt"))
+args = with_default(args, "--root", ROOT)
 args = with_default(args, "--version-file",
                     os.path.join(ROOT, "include", "wolfboot", "version.h"))
 args = with_default(args, "--version-macro", "LIBWOLFBOOT_VERSION_STRING")

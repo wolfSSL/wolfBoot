@@ -34,7 +34,7 @@ The pieces:
 | `cmake/sbom.cmake` | wolfBoot wrapper around the vendored CMake helper. |
 | `tools/sbom/frontends/iar_sbom.py` | Extracts srcs + defines from an IAR `.ewp`. |
 | `tools/sbom/frontends/compdb_sbom.py` | Extracts srcs + defines from a `compile_commands.json`. |
-| `tools/sbom/frontends/zephyr_sbom.py` | Extracts the Zephyr module sources from `zephyr/CMakeLists.txt`. |
+| `tools/sbom/frontends/zephyr_sbom.py` | Extracts the Zephyr module sources from a west build's `compile_commands.json`. |
 | `tools/scripts/ide-sbom/route_through_sbom.sh` | wolfBoot-specific staging helper for IDE targets that build through the Makefile. It intentionally stays outside the vendored tree because it encodes wolfBoot config paths and Makefile entry points. |
 | `tools/sbom/validate_sbom.py` | Structural sanity check used by CI. |
 | `make sbom-hal` | Standalone SBOM for the HAL of a given target. |
@@ -328,34 +328,31 @@ The `zephyr/` directory is **not** the bootloader — it is a Zephyr module that
 compiles a small TEE/PSA non-secure client shim into a Zephyr application
 (`zephyr_library_sources(...)`, gated on `CONFIG_WOLFBOOT_TEE`). It is built by
 Zephyr/west, so neither the Make nor the CMake SBOM target sees it. The
-extractor reads the module's source list straight from `zephyr/CMakeLists.txt`
-(staying in sync automatically):
+extractor reads the `compile_commands.json` that west writes, and keeps the
+sources under the wolfBoot tree whose objects are in the module's library
+directory, `<build>/modules/wolfboot/`. So the SBOM lists the sources that
+the build compiled for the selected Kconfig:
 
 ```sh
-tools/sbom/frontends/zephyr_sbom.py \
+west build ...
+python3 tools/sbom/frontends/zephyr_sbom.py \
     --name wolfboot-zephyr \
-    --cmakelists zephyr/CMakeLists.txt \
+    --compdb build/compile_commands.json \
+    --root . \
     --driver tools/sbom/sbom-driver \
     --version-file include/wolfboot/version.h \
     --version-macro LIBWOLFBOOT_VERSION_STRING
 ```
 
+`tools/scripts/ide-sbom/zephyr_sbom.py --compdb build/compile_commands.json`
+sets the other arguments to these values.
+
 Output: `wolfboot-zephyr-<version>.{cdx,spdx}.json`.
 
 Because the module's configuration is Kconfig-driven (`CONFIG_*` symbols) rather
 than a `-D` macro set, this is a **source-inventory** SBOM by default (no
-build-config macros; the driver's `--source-only` mode). If you have a real
-Zephyr build and want the exact compiled configuration, generate the SBOM from
-that build's compilation database instead:
-
-```sh
-west build ... -- -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-python3 tools/sbom/frontends/compdb_sbom.py build/compile_commands.json \
-    --driver tools/sbom/sbom-driver \
-    --version-file include/wolfboot/version.h \
-    --version-macro LIBWOLFBOOT_VERSION_STRING \
-    --include 'zephyr/src/' --name wolfboot-zephyr
-```
+build-config macros). `--user-settings` records the module's `-D` flags and
+the macros of a settings header, with the build's compiler.
 
 ## Output
 
