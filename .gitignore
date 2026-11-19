@@ -564,6 +564,8 @@ tools/unit-tests/nxp_t10xx_fixup_extract.h
 tools/unit-tests/sama5d3_read_extract.h
 tools/unit-tests/samr21_erase_extract.h
 tools/unit-tests/samr21_erase_fn_extract.h
+tools/unit-tests/samr21_protect_extract.h
+tools/unit-tests/samr21_protect_fn_extract.h
 tools/unit-tests/sdhci_host.c
 tools/unit-tests/stm32l5_write_extract.h
 tools/unit-tests/stm32u5_write_extract.h
@@ -667,6 +669,7 @@ tools/unit-tests/unit-pkcs11-pin-zeroize
 tools/unit-tests/unit-pkcs11_store-stalecache
 tools/unit-tests/unit-rp2350-flash-write
 tools/unit-tests/unit-samr21-erase-advance
+tools/unit-tests/unit-samr21-flash-protect
 tools/unit-tests/unit-sdhci-acmd41-timeout
 tools/unit-tests/unit-secure-handoff
 tools/unit-tests/unit-stm32c0-write
