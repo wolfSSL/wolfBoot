@@ -669,6 +669,7 @@ tools/unit-tests/unit-pkcs11-pin-zeroize
 tools/unit-tests/unit-pkcs11_store-stalecache
 tools/unit-tests/unit-rp2350-flash-write
 tools/unit-tests/unit-samr21-erase-advance
+tools/unit-tests/unit-samr21-flash-protect
 tools/unit-tests/unit-sdhci-acmd41-timeout
 tools/unit-tests/unit-secure-handoff
 tools/unit-tests/unit-stm32c0-write

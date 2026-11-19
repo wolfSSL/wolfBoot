@@ -45,9 +45,10 @@ static uint8_t g_nvm[0x20];
 #define NVMCTRL_BASE ((uintptr_t)g_nvm)
 
 /* Host mock of the PAC1 write-protect registers: WPCLR @ 0x0, WPSET @ 0x4.
- * The hardware treats these as write-one-to-clear and write-one-to-set, so a
- * plain memory mock only records that the bit was written, which is all the
- * assertions below need. */
+ * On the hardware both read back the protection mask, and a write clears or
+ * sets the bits written as one. A plain memory mock keeps the last value
+ * written instead, so a test presets what a read should return and then
+ * checks the exact value the code stored. */
 static uint8_t g_pac[0x8];
 #define PAC1_BASE ((uintptr_t)g_pac)
 
@@ -83,6 +84,9 @@ static void mock_reset(uint32_t param)
  * hal_flash_protect() from hal/samr21.c. */
 #include "samr21_protect_fn_extract.h"
 
+/* Another peripheral's bit in the mask, to show it is left alone. */
+#define PAC_WP_OTHER (1 << 1)
+
 /* The caller runs this after its last write, by which point hal_flash_lock()
  * has handed NVMCTRL back to the PAC, so the command register will not take a
  * write until the PAC is cleared again. Without the unlock the lock commands
@@ -93,14 +97,78 @@ START_TEST (test_protect_clears_pac_around_commands)
     int ret;
 
     mock_reset(PARAM_256K);
+    PAC1_WPSET = PAC_WP_NVMCTL;
 
     ret = hal_flash_protect(0, 0x8000);
 
     ck_assert_int_eq(ret, 0);
-    ck_assert_uint_ne(PAC1_WPCLR & PAC_WP_NVMCTL, 0);
-    /* And handed back afterwards, so the application does not inherit an
-     * unguarded flash controller. */
-    ck_assert_uint_ne(PAC1_WPSET & PAC_WP_NVMCTL, 0);
+    ck_assert_uint_eq(PAC1_WPCLR, PAC_WP_NVMCTL);
+}
+END_TEST
+
+/* Entered with the PAC open: nothing to clear, and clearing a bit that is
+ * already clear is a PAC fault. NVMCTRL is still handed to the PAC on the
+ * way out, so the application does not inherit an unguarded controller. */
+START_TEST (test_protect_guards_open_pac)
+{
+    int ret;
+
+    mock_reset(PARAM_256K);
+
+    ret = hal_flash_protect(0, 0x8000);
+
+    ck_assert_int_eq(ret, 0);
+    ck_assert_uint_eq(PAC1_WPCLR, 0);
+    ck_assert_uint_eq(PAC1_WPSET, PAC_WP_NVMCTL);
+}
+END_TEST
+
+/* WPCLR reads back the whole mask. Writing that back with the NVMCTRL bit
+ * ORed in would unprotect every guarded peripheral, not just NVMCTRL. */
+START_TEST (test_unlock_writes_only_nvmctrl)
+{
+    mock_reset(PARAM_256K);
+    PAC1_WPSET = PAC_WP_NVMCTL | PAC_WP_OTHER;
+    PAC1_WPCLR = PAC_WP_NVMCTL | PAC_WP_OTHER;
+
+    hal_flash_unlock();
+
+    ck_assert_uint_eq(PAC1_WPCLR, PAC_WP_NVMCTL);
+}
+END_TEST
+
+START_TEST (test_unlock_skips_open_pac)
+{
+    mock_reset(PARAM_256K);
+    PAC1_WPSET = PAC_WP_OTHER;
+
+    hal_flash_unlock();
+
+    ck_assert_uint_eq(PAC1_WPCLR, 0);
+}
+END_TEST
+
+/* The same for WPSET: setting a bit that is already set is a PAC fault, so
+ * the other peripheral's bit must not be written back. */
+START_TEST (test_lock_writes_only_nvmctrl)
+{
+    mock_reset(PARAM_256K);
+    PAC1_WPSET = PAC_WP_OTHER;
+
+    hal_flash_lock();
+
+    ck_assert_uint_eq(PAC1_WPSET, PAC_WP_NVMCTL);
+}
+END_TEST
+
+START_TEST (test_lock_skips_guarded_pac)
+{
+    mock_reset(PARAM_256K);
+    PAC1_WPSET = PAC_WP_NVMCTL | PAC_WP_OTHER;
+
+    hal_flash_lock();
+
+    ck_assert_uint_eq(PAC1_WPSET, PAC_WP_NVMCTL | PAC_WP_OTHER);
 }
 END_TEST
 
@@ -326,7 +394,12 @@ Suite *samr21_protect_suite(void)
     tcase_add_test(tc, test_protect_reports_nvm_error);
     tcase_add_test(tc, test_protect_zero_param_rejected);
     tcase_add_test(tc, test_protect_clears_pac_around_commands);
+    tcase_add_test(tc, test_protect_guards_open_pac);
     tcase_add_test(tc, test_protect_restores_pac_on_error);
+    tcase_add_test(tc, test_unlock_writes_only_nvmctrl);
+    tcase_add_test(tc, test_unlock_skips_open_pac);
+    tcase_add_test(tc, test_lock_writes_only_nvmctrl);
+    tcase_add_test(tc, test_lock_skips_guarded_pac);
     /* An unterminated region loop hangs rather than failing; the timeout is
      * what turns that into a reported failure. */
     tcase_set_timeout(tc, 10);

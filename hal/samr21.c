@@ -175,7 +175,9 @@ void hal_prepare_boot(void)
 #ifdef WOLFBOOT_RESTORE_CLOCK
     /* Restore the NVM wait states and page write mode to their reset values */
     APBBMASK_REG |= APBBMASK_NVM_EN;
+    hal_flash_unlock();
     NVMCTRLB_REG &= ~(((WAITSTATES & 0x0f) << 1) | NVMCTRLB_MANW);
+    hal_flash_lock();
 
     /* Reset clock controller */
     GCLK_CTRL = GCLK_CTRL_RESET;
@@ -248,14 +250,19 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return 0;
 }
 
+/* WPCLR and WPSET both read back the protection mask and act on every bit
+ * written as one, and the PAC faults on clearing or setting a bit that is
+ * already in that state. Write only the NVMCTRL bit, and only on a change. */
 void RAMFUNCTION hal_flash_unlock(void)
 {
-    PAC1_WPCLR |= (PAC_WP_NVMCTL);
+    if (PAC1_WPSET & PAC_WP_NVMCTL)
+        PAC1_WPCLR = (PAC_WP_NVMCTL);
 }
 
 void RAMFUNCTION hal_flash_lock(void)
 {
-    PAC1_WPSET |= (PAC_WP_NVMCTL);
+    if (!(PAC1_WPSET & PAC_WP_NVMCTL))
+        PAC1_WPSET = (PAC_WP_NVMCTL);
 }
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
