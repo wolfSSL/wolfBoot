@@ -1,8 +1,17 @@
-# share/
+# wolfssl-compliance-tooling SBOM files
 
-This is the only vendorable set. Use `tools/wolfssl-compliance-tooling-sync` to copy these files
-into a product at `tools/sbom/`, together with the pin files (`VERSION` and
-`.wolfssl-compliance-tooling-rev`). Do not copy the `share/` folder name; copy the files.
+These are the SBOM files that a product vendors from
+[wolfssl-compliance-tooling](https://github.com/wolfSSL/wolfssl-compliance-tooling).
+The source is the `share/` folder of that repository. A product keeps a copy in
+`tools/sbom/`, together with the pin files (`VERSION` and
+`.wolfssl-compliance-tooling-rev`). Do not edit the copy in a product.
+
+To change the pin, run the sync tool from a checkout of
+wolfssl-compliance-tooling. The tool is not vendored into the product:
+
+    <tooling-checkout>/tools/wolfssl-compliance-tooling-sync --dest <product> --prune
+
+Add `--check` to find drift, including lost executable bits, without a copy.
 
 ## Contents
 
@@ -17,6 +26,10 @@ into a product at `tools/sbom/`, together with the pin files (`VERSION` and
 | `frontends/zephyr_sbom.py` | Zephyr module, from a west build's `compile_commands.json`. |
 | `build/sbom.mk` | Shared plain-Make fragment and `wolfssl_compliance_tooling_sbom_rule` macro. |
 | `build/sbom.cmake` | Shared CMake helper: `wolfssl_compliance_tooling_add_sbom()`. |
+| `build/sbom-with-sde.cmake` | Runs the driver with `SOURCE_DATE_EPOCH`, after the `STAGE_TARGET` install. |
+| `build/sbom-validate.cmake` | `VALIDATE` step: pyspdxtools check and SPDX tag-value file. |
+| `build/sbom-fail.cmake` | Target body when python3 or pyspdxtools is missing. |
+| `build/install-sbom.cmake`, `build/uninstall-sbom.cmake`, `build/sbom-paths.cmake` | `install-sbom` and `uninstall-sbom`. |
 | `gen-sbom` | The vendored SBOM generator. |
 | `sbom.am` | Shared autotools fragment. |
 
@@ -25,7 +38,7 @@ into a product at `tools/sbom/`, together with the pin files (`VERSION` and
 Every front end produces a composition input and a config input and hands them to
 the driver.
 
-Composition (at least one):
+Composition (pick one):
 
 - `--srcs-file PATH` — the source files compiled into the artifact (tier E).
 - `--lib PATH` — the built library to hash (tier R/L/S).
@@ -41,8 +54,16 @@ Config (choose one):
 - `--options-h PATH` — a pre-expanded flat `#define` header, used verbatim.
 - `--user-settings PATH` — path to `wolfssl/wolfcrypt/settings.h`. Also pass
   `--user-settings-include DIR` (the directory that contains `user_settings.h`)
-  and `--user-settings-define WOLFSSL_USER_SETTINGS`.
+  and `--user-settings-define WOLFSSL_USER_SETTINGS`. The autotools fragment
+  takes `SBOM_USER_SETTINGS`, `SBOM_USER_SETTINGS_INCLUDES` and
+  `SBOM_USER_SETTINGS_DEFINES`.
 - `--source-only` — no build-config macros (for example a Kconfig-driven build).
+
+A product that shares one `user_settings.h` with wolfSSL captures wolfSSL's
+macros along with its own. Pass `--macro-prefix PREFIX` (repeatable; Make and
+autotools `SBOM_MACRO_PREFIX`, CMake `MACRO_PREFIX`) to record only the macros
+whose name starts with that prefix, for example `WOLFCERT_`. `--crypto-only auto`
+still reads the full capture.
 
 Dependency (for linkers and bindings): `--dep-wolfssl`, `--dep-openssl`, and
 `--dep-version` are passed through only when the generator supports them.
@@ -78,7 +99,11 @@ A product does not copy logic. It describes itself:
   `<prefix>/share/doc/<NAME>`) and read `DESTDIR` when the target runs.
   Pass `CDX_OUT` / `SPDX_OUT`
   when the file name is not `<name>-<version>` (wolfBoot's config tag).
-  wolfTPM writes the tag-value file in a later `sbom` target: pass
+  To hash the installed library and validate the SPDX file as `make sbom`
+  does, pass `STAGE_TARGET <library target>` and `VALIDATE`. Then
+  `install-sbom` also installs the tag-value file. A missing python3 or
+  pyspdxtools does not fail configure; the `sbom` target fails when it is built.
+  A product that writes the tag-value file in its own later target can pass
   `NO_INSTALL` and call `wolfssl_compliance_tooling_add_sbom_install(DEPENDS sbom TV ...)`
   after that target exists.
   `SBOM_GEN` is the canonical generator override; `GEN_SBOM` remains a legacy
@@ -90,7 +115,8 @@ A product does not copy logic. It describes itself:
   actually built. Without that hook, run `zephyr_sbom.py` on the build's
   `compile_commands.json` with `--root` set to the module, and pass
   `--user-settings` with the module's settings header to record its
-  configuration.
+  configuration. A module that adds its sources with `target_sources(app
+  ...)`, as wolfTPM does, needs `--target app`.
 
 Keep only true product knowledge in the product: the route-through script, the
 module extractor, and the HAL source selector.

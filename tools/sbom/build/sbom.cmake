@@ -18,6 +18,9 @@
 #       LICENSE       ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
 #   )
 #
+# Composition, one of: TARGETS <tgt>... (hash the source set), LIB <path>
+# (hash the built library), or NO_ARTIFACT_HASH alone.
+#
 # Optional arguments:
 #   SBOM_GEN <path>   Path to gen-sbom (default: driver auto-discovery).
 #   GEN_SBOM <path>   Legacy alias for SBOM_GEN.
@@ -57,6 +60,27 @@
 #                     LICENSE_OVERRIDE (required by SPDX 2.3).
 #   NO_ARTIFACT_HASH      Record a placeholder checksum. Do not pass TARGETS
 #                     or LIB with this option.
+#   STAGE_TARGET <t>  Hash the installed copy of library or program <t>,
+#                     as `make sbom` does. When the target runs, the whole
+#                     project is installed with DESTDIR into a private
+#                     staging directory under the build tree, one for each
+#                     TARGET_NAME. The file is
+#                     <t>'s file name in CMAKE_INSTALL_FULL_LIBDIR, or in
+#                     CMAKE_INSTALL_FULL_BINDIR for a program or a Windows
+#                     DLL. The staging directory is removed after the
+#                     driver runs, also when it fails. A DESTDIR in the
+#                     environment does not change the staging, and an
+#                     absolute install directory stays inside it. Do not
+#                     pass LIB or TARGETS with this option.
+#   VALIDATE          Validate the SPDX file with pyspdxtools and write the
+#                     SPDX tag-value file, as `make sbom` does. The
+#                     tag-value file is TV_OUT, or the SPDX path without
+#                     ".json". install-sbom then installs it. An SPDX_OUT
+#                     that does not end in ".json" needs a TV_OUT.
+#   PYSPDXTOOLS <path>  pyspdxtools for VALIDATE (default: find_program).
+#
+# When python3 is missing, or pyspdxtools is missing with VALIDATE, configure
+# does not fail. The target fails with the reason when someone builds it.
 #
 #   USER_SETTINGS <path>  Path to wolfssl/wolfcrypt/settings.h. This is the
 #                     generator's pcpp entry point. Also pass
@@ -67,6 +91,8 @@
 #                     them must contain user_settings.h.
 #   USER_SETTINGS_DEFINE <NAME[=VALUE]>...  Predefines for that preprocess.
 #                     Include WOLFSSL_USER_SETTINGS.
+#   MACRO_PREFIX <prefix>...  Record only the captured macros whose name
+#                     starts with one of these prefixes, e.g. WOLFCERT_.
 #   TV_OUT <path>     SPDX tag-value file, when a later step writes one.
 #   INSTALL_DIR <dir> Doc directory for install-sbom. Default:
 #                     CMAKE_INSTALL_FULL_DOCDIR, else
@@ -101,30 +127,56 @@ get_filename_component(_WOLFSSL_COMPLIANCE_TOOLING_DRIVER
     "${_WOLFSSL_COMPLIANCE_TOOLING_SBOM_DIR}/../sbom-driver.py" ABSOLUTE)
 find_package(Python3 COMPONENTS Interpreter)
 
+# Fallbacks for a call from a directory that did not include() this file.
+set_property(GLOBAL PROPERTY _WOLFSSL_COMPLIANCE_TOOLING_SBOM_DIR
+    "${CMAKE_CURRENT_LIST_DIR}")
+set_property(GLOBAL PROPERTY _WOLFSSL_COMPLIANCE_TOOLING_PYTHON3
+    "${Python3_EXECUTABLE}")
+
 function(wolfssl_compliance_tooling_add_sbom)
-    set(_opts NO_ARTIFACT_HASH SOURCE_ONLY NO_INSTALL)
+    set(_opts NO_ARTIFACT_HASH SOURCE_ONLY NO_INSTALL VALIDATE)
     set(_one NAME TARGET_NAME VERSION VERSION_FILE VERSION_MACRO LICENSE
-             SBOM_GEN GEN_SBOM HOSTCC ROOT LIB USER_SETTINGS OPTIONS_H SETTINGS_H
+             SBOM_GEN GEN_SBOM HOSTCC ROOT LIB STAGE_TARGET PYSPDXTOOLS
+             USER_SETTINGS OPTIONS_H SETTINGS_H
              DEP_WOLFSSL DEP_WOLFCRYPT DEP_OPENSSL DEP_LIBZ CRYPTO_ONLY
              CDX_OUT SPDX_OUT TV_OUT COMPONENT_TYPE DOCUMENT_NAMESPACE
              COPYRIGHT_START
              LICENSE_OVERRIDE LICENSE_TEXT
              INSTALL_DIR INSTALL_DEPENDS INSTALL_TARGET UNINSTALL_TARGET)
     set(_multi TARGETS DEFS DEP_VERSION INCLUDE_DIRS
-             USER_SETTINGS_INCLUDE USER_SETTINGS_DEFINE)
+             USER_SETTINGS_INCLUDE USER_SETTINGS_DEFINE MACRO_PREFIX)
     cmake_parse_arguments(SB "${_opts}" "${_one}" "${_multi}" ${ARGN})
 
     if(NOT SB_NAME)
         message(FATAL_ERROR "wolfssl_compliance_tooling_add_sbom: NAME is required")
     endif()
+    if(SB_LIB MATCHES "-NOTFOUND$")
+        message(FATAL_ERROR
+            "wolfssl_compliance_tooling_add_sbom: LIB was not found (${SB_LIB})")
+    endif()
     if(SB_NO_ARTIFACT_HASH)
-        if(SB_TARGETS OR SB_LIB)
+        if(SB_TARGETS OR NOT "${SB_LIB}" STREQUAL "" OR SB_STAGE_TARGET)
             message(FATAL_ERROR
                 "wolfssl_compliance_tooling_add_sbom: NO_ARTIFACT_HASH stands "
-                "alone. Do not pass TARGETS or LIB.")
+                "alone. Do not pass TARGETS, LIB or STAGE_TARGET.")
         endif()
-    elseif(NOT SB_TARGETS AND NOT SB_LIB)
-        message(FATAL_ERROR "wolfssl_compliance_tooling_add_sbom: set TARGETS or LIB")
+    elseif(SB_STAGE_TARGET)
+        if(SB_TARGETS OR NOT "${SB_LIB}" STREQUAL "")
+            message(FATAL_ERROR
+                "wolfssl_compliance_tooling_add_sbom: STAGE_TARGET names the "
+                "hashed file. Do not pass LIB or TARGETS.")
+        endif()
+        if(NOT TARGET ${SB_STAGE_TARGET})
+            message(FATAL_ERROR
+                "wolfssl_compliance_tooling_add_sbom: STAGE_TARGET "
+                "${SB_STAGE_TARGET} is not a target")
+        endif()
+    elseif(SB_TARGETS AND NOT "${SB_LIB}" STREQUAL "")
+        message(FATAL_ERROR
+            "wolfssl_compliance_tooling_add_sbom: set TARGETS or LIB, not both")
+    elseif(NOT SB_TARGETS AND "${SB_LIB}" STREQUAL "")
+        message(FATAL_ERROR
+            "wolfssl_compliance_tooling_add_sbom: set TARGETS, LIB or STAGE_TARGET")
     endif()
     if(NOT SB_ROOT)
         set(SB_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
@@ -167,13 +219,62 @@ function(wolfssl_compliance_tooling_add_sbom)
     list(REMOVE_DUPLICATES _srcs)
 
     if(NOT Python3_EXECUTABLE)
-        message(FATAL_ERROR
-            "wolfssl_compliance_tooling_add_sbom: python3 was not found")
+        get_property(Python3_EXECUTABLE GLOBAL PROPERTY
+            _WOLFSSL_COMPLIANCE_TOOLING_PYTHON3)
     endif()
+    set(_sbom_error "")
+    if(NOT Python3_EXECUTABLE)
+        set(_sbom_error
+            "python3 was not found. Cannot generate the ${SB_NAME} SBOM.")
+    elseif(SB_VALIDATE AND NOT SB_PYSPDXTOOLS)
+        find_program(WOLFSSL_COMPLIANCE_TOOLING_PYSPDXTOOLS pyspdxtools)
+        if(WOLFSSL_COMPLIANCE_TOOLING_PYSPDXTOOLS)
+            set(SB_PYSPDXTOOLS ${WOLFSSL_COMPLIANCE_TOOLING_PYSPDXTOOLS})
+        else()
+            set(_sbom_error
+                "pyspdxtools was not found (pip install spdx-tools). "
+                "Cannot validate the ${SB_NAME} SBOM.")
+        endif()
+    endif()
+
+    if(SB_STAGE_TARGET)
+        # One directory per target: parallel SBOM targets must not remove
+        # each other's staged install.
+        set(_stage_dir "${CMAKE_CURRENT_BINARY_DIR}/_sbom_staging-${SB_TARGET_NAME}")
+        get_target_property(_stage_type ${SB_STAGE_TARGET} TYPE)
+        if(_stage_type STREQUAL "EXECUTABLE" OR
+           (WIN32 AND _stage_type STREQUAL "SHARED_LIBRARY"))
+            set(_stage_kind BINDIR)
+            set(_stage_default bin)
+        else()
+            set(_stage_kind LIBDIR)
+            set(_stage_default lib)
+        endif()
+        if(CMAKE_INSTALL_FULL_${_stage_kind})
+            set(_stage_inst "${CMAKE_INSTALL_FULL_${_stage_kind}}")
+        elseif(CMAKE_INSTALL_${_stage_kind})
+            set(_stage_inst "${CMAKE_INSTALL_${_stage_kind}}")
+        else()
+            set(_stage_inst "${_stage_default}")
+        endif()
+        if(NOT IS_ABSOLUTE "${_stage_inst}")
+            set(_stage_inst "${CMAKE_INSTALL_PREFIX}/${_stage_inst}")
+        endif()
+        # file(INSTALL) drops the drive letter when it prepends DESTDIR.
+        string(REGEX REPLACE "^[A-Za-z]:" "" _stage_inst "${_stage_inst}")
+        set(SB_LIB
+            "${_stage_dir}${_stage_inst}/$<TARGET_FILE_NAME:${SB_STAGE_TARGET}>")
+    endif()
+
+    set(_sbom_dir "${_WOLFSSL_COMPLIANCE_TOOLING_SBOM_DIR}")
+    if(NOT _sbom_dir)
+        get_property(_sbom_dir GLOBAL PROPERTY _WOLFSSL_COMPLIANCE_TOOLING_SBOM_DIR)
+    endif()
+    get_filename_component(_driver "${_sbom_dir}/../sbom-driver.py" ABSOLUTE)
 
     set(_cmd ${CMAKE_COMMAND} -E env HOSTCC=${SB_HOSTCC}
              ${Python3_EXECUTABLE}
-             ${_WOLFSSL_COMPLIANCE_TOOLING_DRIVER}
+             ${_driver}
              --name ${SB_NAME}
              --root ${SB_ROOT}
              --license-file ${SB_LICENSE}
@@ -190,7 +291,7 @@ function(wolfssl_compliance_tooling_add_sbom)
             file(GENERATE OUTPUT ${_srcs_file} CONTENT "${_srcs_nl}\n")
             list(APPEND _cmd --srcs-file ${_srcs_file})
         endif()
-        if(SB_LIB)
+        if(NOT "${SB_LIB}" STREQUAL "")
             list(APPEND _cmd --lib ${SB_LIB})
         endif()
     endif()
@@ -274,6 +375,9 @@ function(wolfssl_compliance_tooling_add_sbom)
     if(NOT "${SB_CRYPTO_ONLY}" STREQUAL "")
         list(APPEND _cmd --crypto-only "${SB_CRYPTO_ONLY}")
     endif()
+    foreach(_pfx IN LISTS SB_MACRO_PREFIX)
+        list(APPEND _cmd --macro-prefix ${_pfx})
+    endforeach()
     foreach(_dv IN LISTS SB_DEP_VERSION)
         list(APPEND _cmd --dep-version ${_dv})
     endforeach()
@@ -298,19 +402,73 @@ function(wolfssl_compliance_tooling_add_sbom)
     if(SB_SPDX_OUT)
         list(APPEND _cmd --spdx-out ${SB_SPDX_OUT})
     endif()
+    # The validator writes TV_OUT from SPDX_OUT and removes TV_OUT when it
+    # fails, so the two paths must differ.
+    if(SB_VALIDATE AND "${SB_TV_OUT}" STREQUAL "" AND SB_SPDX_OUT AND
+       NOT SB_SPDX_OUT MATCHES "\\.json$")
+        message(FATAL_ERROR
+            "wolfssl_compliance_tooling_add_sbom: VALIDATE needs TV_OUT when "
+            "SPDX_OUT does not end in .json (${SB_SPDX_OUT})")
+    endif()
+    if(NOT "${SB_TV_OUT}" STREQUAL "" AND "${SB_TV_OUT}" STREQUAL "${SB_SPDX_OUT}")
+        message(FATAL_ERROR
+            "wolfssl_compliance_tooling_add_sbom: TV_OUT and SPDX_OUT are the "
+            "same file (${SB_TV_OUT})")
+    endif()
 
     # SOURCE_DATE_EPOCH is applied when the target runs. A value set only
     # for the build is kept. Git supplies the commit time only when the
     # variable is empty. Configure time does not freeze it.
-    add_custom_target(${SB_TARGET_NAME}
-        COMMAND ${CMAKE_COMMAND}
-            -DSBOM_ROOT=${SB_ROOT}
-            -P "${_WOLFSSL_COMPLIANCE_TOOLING_SBOM_DIR}/sbom-with-sde.cmake"
-            --
-            ${_cmd}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        VERBATIM
-        COMMENT "Generating ${SB_NAME} SBOM (CycloneDX 1.6 + SPDX 2.3)")
+    set(_paths
+        -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_CDX=${SB_CDX_OUT}
+        -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_SPDX=${SB_SPDX_OUT}
+        -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_TV=${SB_TV_OUT}
+        -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_TV_FROM_SPDX=${SB_VALIDATE}
+        -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_NAME=${SB_NAME}
+        -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_VERSION=${SB_VERSION}
+        -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_VERSION_FILE=${SB_VERSION_FILE}
+        -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_VERSION_MACRO=${SB_VERSION_MACRO}
+        -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_BINDIR=${CMAKE_CURRENT_BINARY_DIR})
+
+    if(NOT _sbom_error STREQUAL "")
+        add_custom_target(${SB_TARGET_NAME}
+            COMMAND ${CMAKE_COMMAND}
+                "-DWOLFSSL_COMPLIANCE_TOOLING_SBOM_ERROR=${_sbom_error}"
+                -P "${_sbom_dir}/sbom-fail.cmake"
+            VERBATIM
+            COMMENT "${SB_NAME} SBOM prerequisites missing")
+    else()
+        set(_stage_args "")
+        if(SB_STAGE_TARGET)
+            set(_stage_args
+                -DSBOM_STAGE_DIR=${_stage_dir}
+                -DSBOM_STAGE_BUILD_DIR=${CMAKE_BINARY_DIR}
+                -DSBOM_STAGE_CONFIG=$<CONFIG>
+                -DSBOM_STAGE_LIB=${SB_LIB})
+        endif()
+        set(_validate "")
+        if(SB_VALIDATE)
+            set(_validate
+                COMMAND ${CMAKE_COMMAND}
+                    -DWOLFSSL_COMPLIANCE_TOOLING_PYSPDXTOOLS=${SB_PYSPDXTOOLS}
+                    ${_paths}
+                    -P "${_sbom_dir}/sbom-validate.cmake")
+        endif()
+        add_custom_target(${SB_TARGET_NAME}
+            COMMAND ${CMAKE_COMMAND}
+                -DSBOM_ROOT=${SB_ROOT}
+                ${_stage_args}
+                -P "${_sbom_dir}/sbom-with-sde.cmake"
+                --
+                ${_cmd}
+            ${_validate}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+            VERBATIM
+            COMMENT "Generating ${SB_NAME} SBOM (CycloneDX 1.6 + SPDX 2.3)")
+        if(SB_STAGE_TARGET)
+            add_dependencies(${SB_TARGET_NAME} ${SB_STAGE_TARGET})
+        endif()
+    endif()
 
     if(NOT SB_NO_INSTALL)
         set(_install_depends ${SB_TARGET_NAME})
@@ -323,6 +481,7 @@ function(wolfssl_compliance_tooling_add_sbom)
             CDX "${SB_CDX_OUT}"
             SPDX "${SB_SPDX_OUT}"
             TV "${SB_TV_OUT}"
+            TV_FROM_SPDX "${SB_VALIDATE}"
             VERSION "${SB_VERSION}"
             VERSION_FILE "${SB_VERSION_FILE}"
             VERSION_MACRO "${SB_VERSION_MACRO}"
@@ -339,8 +498,8 @@ endfunction()
 # target validates SPDX and writes the tag-value file after the helper
 # returns. Pass DEPENDS sbom and TV the tag-value path.
 function(wolfssl_compliance_tooling_add_sbom_install)
-    set(_one NAME DEPENDS INSTALL_DIR CDX SPDX TV VERSION VERSION_FILE
-             VERSION_MACRO BINDIR INSTALL_TARGET UNINSTALL_TARGET)
+    set(_one NAME DEPENDS INSTALL_DIR CDX SPDX TV TV_FROM_SPDX VERSION
+             VERSION_FILE VERSION_MACRO BINDIR INSTALL_TARGET UNINSTALL_TARGET)
     cmake_parse_arguments(SI "" "${_one}" "" ${ARGN})
 
     if(NOT SI_NAME)
@@ -371,6 +530,10 @@ function(wolfssl_compliance_tooling_add_sbom_install)
     if(NOT IS_ABSOLUTE "${_docdir}")
         set(_docdir "${CMAKE_INSTALL_PREFIX}/${_docdir}")
     endif()
+    set(_sbom_dir "${_WOLFSSL_COMPLIANCE_TOOLING_SBOM_DIR}")
+    if(NOT _sbom_dir)
+        get_property(_sbom_dir GLOBAL PROPERTY _WOLFSSL_COMPLIANCE_TOOLING_SBOM_DIR)
+    endif()
 
     add_custom_target(${SI_INSTALL_TARGET}
         COMMAND ${CMAKE_COMMAND}
@@ -378,12 +541,13 @@ function(wolfssl_compliance_tooling_add_sbom_install)
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_CDX=${SI_CDX}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_SPDX=${SI_SPDX}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_TV=${SI_TV}
+            -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_TV_FROM_SPDX=${SI_TV_FROM_SPDX}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_NAME=${SI_NAME}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_VERSION=${SI_VERSION}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_VERSION_FILE=${SI_VERSION_FILE}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_VERSION_MACRO=${SI_VERSION_MACRO}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_BINDIR=${SI_BINDIR}
-            -P "${_WOLFSSL_COMPLIANCE_TOOLING_SBOM_DIR}/install-sbom.cmake"
+            -P "${_sbom_dir}/install-sbom.cmake"
         VERBATIM
         COMMENT "Installing ${SI_NAME} SBOM to ${_docdir}")
     add_dependencies(${SI_INSTALL_TARGET} ${SI_DEPENDS})
@@ -394,12 +558,18 @@ function(wolfssl_compliance_tooling_add_sbom_install)
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_CDX=${SI_CDX}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_SPDX=${SI_SPDX}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_TV=${SI_TV}
+            -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_TV_FROM_SPDX=${SI_TV_FROM_SPDX}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_NAME=${SI_NAME}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_VERSION=${SI_VERSION}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_VERSION_FILE=${SI_VERSION_FILE}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_VERSION_MACRO=${SI_VERSION_MACRO}
             -DWOLFSSL_COMPLIANCE_TOOLING_SBOM_BINDIR=${SI_BINDIR}
-            -P "${_WOLFSSL_COMPLIANCE_TOOLING_SBOM_DIR}/uninstall-sbom.cmake"
+            -P "${_sbom_dir}/uninstall-sbom.cmake"
         VERBATIM
         COMMENT "Uninstalling ${SI_NAME} SBOM from ${_docdir}")
 endfunction()
+
+# Products vendored before the rename still call wolfglass_add_sbom().
+macro(wolfglass_add_sbom)
+    wolfssl_compliance_tooling_add_sbom(${ARGN})
+endmacro()
