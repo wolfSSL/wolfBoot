@@ -75,6 +75,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-sectorflags unit-max-space \
        unit-image unit-image-hybrid unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-key unit-enc-key-aes256 unit-enc-key-straddle \
+       unit-enc-key-writeonce \
        unit-enc-key-sector unit-enc-key-flagshome \
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-db \
@@ -434,6 +435,12 @@ unit-enc-key-sector:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH -DEXT_ENCRYPTED \
 	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DMOCK_FLASH_ERASE_UNIT=0x1000
 unit-enc-key-sector:WOLFCRYPT_SRC+= \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
+unit-enc-key-writeonce:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH -DEXT_ENCRYPTED \
+	-DENCRYPT_WITH_CHACHA -DHAVE_CHACHA -DNVM_FLASH_WRITEONCE \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DMOCK_FLASH_ERASE_UNIT=0x1000 \
+	-DNVM_CACHE_SIZE=512 -DFLASHBUFFER_SIZE=512
+unit-enc-key-writeonce:WOLFCRYPT_SRC+= \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
 unit-enc-key-flagshome:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH -DEXT_ENCRYPTED \
 	-DENCRYPT_WITH_CHACHA -DHAVE_CHACHA -DWOLFBOOT_SMALL_STACK \
 	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_FLASH_ERASE_UNIT=128 \
@@ -476,7 +483,7 @@ unit-update-flash-flagshome:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_
 unit-update-flash-invert:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DNVM_FLASH_WRITEONCE -DWOLFBOOT_FLAGS_INVERT=1 -DFLAGS_HOME=1 \
-	-DFLASHBUFFER_SIZE=512 \
+	-DFLASHBUFFER_SIZE=512 -DNVM_CACHE_SIZE=512 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 # Write-once trailers with inverted flags and every partition in internal flash
 unit-update-flash-int-invert:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
@@ -1258,7 +1265,7 @@ unit-enc-nvm-flagshome: ../../include/target.h unit-enc-nvm.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-enc-nvm.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
 
 unit-enc-key unit-enc-key-aes256 unit-enc-key-straddle \
-unit-enc-key-sector unit-enc-key-flagshome: \
+unit-enc-key-sector unit-enc-key-writeonce unit-enc-key-flagshome: \
 	../../include/target.h unit-enc-key.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-enc-key.c $(CFLAGS) \
 		$(WOLFCRYPT_CFLAGS) $(LDFLAGS)
@@ -2544,12 +2551,15 @@ unit-stm32u5-write: unit-stm32u5-write.c stm32u5_write_extract.h
 # owns NVM_CACHE, stages a key-bearing sector image, and stubs the
 # flash layer; after each call the whole buffer must be zeroed.
 nvm_cache_scrub_extract.h: ../../src/libwolfboot.c
-	sed -n '/^static void RAMFUNCTION nvm_cache_scrub(/,/^}/p' $< > $@
+	sed -n '/^typedef struct {/,/^} nvm_sector_patch_t;/p' $< > $@
+	sed -n '/^static int RAMFUNCTION nvm_sector_copy_with_patches(/,/^}/p' $< >> $@
+	sed -n '/^static int RAMFUNCTION nvm_sector_copy_with_patch(/,/^}/p' $< >> $@
+	sed -n '/^static void RAMFUNCTION nvm_cache_scrub(/,/^}/p' $< >> $@
 	sed -n '/^static int RAMFUNCTION trailer_write(/,/^}/p' $< >> $@
 	sed -n '/^static int RAMFUNCTION partition_magic_write(/,/^}/p' $< >> $@
 
 unit-nvm-cache-scrub: unit-nvm-cache-scrub.c nvm_cache_scrub_extract.h
-	gcc -o $@ unit-nvm-cache-scrub.c $(CFLAGS) $(LDFLAGS)
+	gcc -o $@ unit-nvm-cache-scrub.c -DXMEMSET=memset -DFLASH_BYTE_ERASED=0xFF $(CFLAGS) $(LDFLAGS)
 
 # unit-update-trigger-scrub runs the real wolfBoot_update_trigger()
 # from src/libwolfboot.c over the NVM_FLASH_WRITEONCE branch
@@ -2558,11 +2568,14 @@ unit-nvm-cache-scrub: unit-nvm-cache-scrub.c nvm_cache_scrub_extract.h
 # The function is extracted together with nvm_cache_scrub(); the build
 # defines NVM_FLASH_WRITEONCE so the write-once branch compiles.
 update_trigger_scrub_extract.h: ../../src/libwolfboot.c
-	sed -n '/^static void RAMFUNCTION nvm_cache_scrub(/,/^}/p' $< > $@
+	sed -n '/^typedef struct {/,/^} nvm_sector_patch_t;/p' $< > $@
+	sed -n '/^static int RAMFUNCTION nvm_sector_copy_with_patches(/,/^}/p' $< >> $@
+	sed -n '/^static int RAMFUNCTION nvm_sector_copy_with_patch(/,/^}/p' $< >> $@
+	sed -n '/^static void RAMFUNCTION nvm_cache_scrub(/,/^}/p' $< >> $@
 	sed -n '/^void RAMFUNCTION wolfBoot_update_trigger(/,/^}/p' $< >> $@
 
 unit-update-trigger-scrub: unit-update-trigger-scrub.c update_trigger_scrub_extract.h
-	gcc -o $@ unit-update-trigger-scrub.c -DNVM_FLASH_WRITEONCE $(CFLAGS) $(LDFLAGS)
+	gcc -o $@ unit-update-trigger-scrub.c -DNVM_FLASH_WRITEONCE -DXMEMSET=memset -DFLASH_BYTE_ERASED=0xFF -DFLASHBUFFER_SIZE=WOLFBOOT_SECTOR_SIZE $(CFLAGS) $(LDFLAGS)
 
 # unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
 # real src/sdhci.c (any read error permanently switched the host
