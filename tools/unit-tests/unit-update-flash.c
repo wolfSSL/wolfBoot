@@ -779,6 +779,36 @@ START_TEST (test_self_update_self_header_newversion_installs)
     cleanup_flash();
 }
 END_TEST
+
+/* The self-header is present but has no version field, so the update cannot
+ * be checked against it. It is not installed, and stays staged. */
+START_TEST (test_self_update_self_header_no_version_denied)
+{
+    uintptr_t hdr = WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS;
+    uint32_t magic = WOLFBOOT_MAGIC;
+    uint32_t size_img = host_to_img_u32(TEST_SIZE_SMALL);
+
+    reset_mock_stats();
+    prepare_flash();
+    clear_erase_stats();
+    ext_flash_unlock();
+    ext_flash_erase(hdr, WOLFBOOT_SELF_HEADER_SIZE);
+    ext_flash_write(hdr, (void *)&magic, 4);
+    ext_flash_write(hdr + 4, (void *)&size_img, 4);
+    ext_flash_lock();
+    stage_self_update(WOLFBOOT_VERSION + 1);
+    ck_assert_ptr_nonnull(wolfBoot_get_self_header());
+    ck_assert_uint_eq(wolfBoot_get_self_version(), 0);
+
+    wolfBoot_check_self_update();
+
+    ck_assert_int_eq(arch_reboot_called, 0);
+    ck_assert_int_eq(erased_update, 0);
+    ck_assert_uint_eq(*(uint32_t *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
+        0xFFFFFFFFu);
+    cleanup_flash();
+}
+END_TEST
 #endif /* WOLFBOOT_SELF_UPDATE_MONOLITHIC && WOLFBOOT_SELF_HEADER */
 #endif
 
@@ -3251,6 +3281,7 @@ Suite *wolfboot_suite(void)
     TCase *self_header_sameversion = tcase_create("Self update self-header same version erased");
     TCase *self_header_oldversion = tcase_create("Self update self-header older version erased");
     TCase *self_header_newversion = tcase_create("Self update self-header newer version installs");
+    TCase *self_header_no_version = tcase_create("Self update self-header without version denied");
 #endif
 
     tcase_add_test(self_update_sameversion, test_self_update_sameversion_erased);
@@ -3261,6 +3292,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(self_header_sameversion, test_self_update_self_header_sameversion_erased);
     tcase_add_test(self_header_oldversion, test_self_update_self_header_oldversion_erased);
     tcase_add_test(self_header_newversion, test_self_update_self_header_newversion_installs);
+    tcase_add_test(self_header_no_version, test_self_update_self_header_no_version_denied);
 #endif
 
     suite_add_tcase(s, self_update_sameversion);
@@ -3275,6 +3307,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, self_header_sameversion);
     suite_add_tcase(s, self_header_oldversion);
     suite_add_tcase(s, self_header_newversion);
+    suite_add_tcase(s, self_header_no_version);
 #endif
 #endif
     return s;

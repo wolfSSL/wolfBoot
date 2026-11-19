@@ -320,10 +320,20 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
 #if defined(WOLFBOOT_SELF_UPDATE_MONOLITHIC) && defined(WOLFBOOT_SELF_HEADER)
         /* The self-header has the installed payload's version, which may be
          * newer than the WOLFBOOT_VERSION this bootloader was built with */
-        uint32_t self_version = wolfBoot_get_self_version();
+        uint8_t *self_hdr = wolfBoot_get_self_header();
 
-        if (self_version > current_version) {
-            current_version = self_version;
+        if (self_hdr != NULL) {
+            uint32_t self_version = wolfBoot_get_blob_version(self_hdr);
+
+            /* A valid header always has a version. Without it the update
+             * cannot be checked against the installed payload. */
+            if (self_version == 0) {
+                wolfBoot_printf("Self header version unreadable\n");
+                return;
+            }
+            if (self_version > current_version) {
+                current_version = self_version;
+            }
         }
 #endif
         if (update_version <= current_version) {
