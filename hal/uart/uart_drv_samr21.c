@@ -199,9 +199,8 @@ int uart_tx(const uint8_t c)
     return 1;
 }
 
-int uart_rx(uint8_t *c, int len)
+int uart_rx(uint8_t *c)
 {
-    (void)len;
     if (SERCOM_INTFLAG & INTFLAG_RXC) {
         *c = (uint8_t)SERCOM_DATA;
         return 1;
