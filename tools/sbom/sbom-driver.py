@@ -42,6 +42,7 @@ reach gen-sbom (for example -DPICO_SDK_PATH=/home/you/pico-sdk from arch.mk). Us
 """
 
 import argparse
+import functools
 import os
 import re
 import subprocess
@@ -123,14 +124,47 @@ def find_gen_sbom(explicit):
     return sibling  # report the sibling path in the error message
 
 
-def gen_sbom_supports(python, gen_sbom, flag):
-    """Return True if the generator advertises a flag in its --help."""
+@functools.lru_cache(maxsize=None)
+def _gen_sbom_help(python, gen_sbom):
     try:
         res = subprocess.run([python, gen_sbom, "--help"],
                              capture_output=True, text=True, check=False)
     except OSError:
-        return False
-    return flag in (res.stdout + res.stderr)
+        return ""
+    return res.stdout + res.stderr
+
+
+def gen_sbom_supports(python, gen_sbom, flag):
+    """Return True if the generator advertises a flag in its --help."""
+    return flag in _gen_sbom_help(python, gen_sbom)
+
+
+def default_source_date_epoch(root):
+    """Return the last commit time of the checkout that tracks root, or "".
+
+    Uses the same rule as build/sbom-with-sde.cmake and sbom.am: root must
+    hold tracked files, so a tarball unpacked inside another checkout does
+    not take that checkout's time.
+    """
+    def git(args, capture):
+        # ls-files prints every tracked path and only its status is used.
+        # Leave both streams unread, so a file name this locale cannot
+        # decode does not raise UnicodeDecodeError.
+        try:
+            res = subprocess.run(
+                ["git", "-C", root, *args],
+                stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                text=capture, check=False)
+        except OSError:
+            return None
+        if res.returncode != 0:
+            return None
+        return res.stdout.strip() if capture else ""
+
+    if git(["ls-files", "--error-unmatch", "--", "."], False) is None:
+        return ""
+    return git(["log", "-1", "--format=%ct"], True) or ""
 
 
 def split_cflags(cflags):
@@ -513,7 +547,16 @@ def main():
             print(f"  sources: {src_count} file(s)")
         print(f"  outputs: {cdx_out}  {spdx_out}")
 
-        rc = subprocess.call(cmd)
+        # Only an explicit --root selects the checkout. The working
+        # directory is not one: a front end run from inside another
+        # checkout would otherwise take that checkout's time.
+        env = None
+        if args.root and not os.environ.get("SOURCE_DATE_EPOCH"):
+            sde = default_source_date_epoch(root)
+            if sde:
+                env = dict(os.environ, SOURCE_DATE_EPOCH=sde)
+
+        rc = subprocess.call(cmd, env=env)
     finally:
         for f in tmp_files:
             try:
