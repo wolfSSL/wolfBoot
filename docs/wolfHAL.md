@@ -52,12 +52,12 @@ config/examples/<chip>_wolfhal_<board>.config
   └─ TARGET=<chip>  BOARD=<board>  WOLFHAL=1
 
 arch.mk
-  └─ Sets WOLFHAL_ROOT, CFLAGS += -Ihal/boards/$(BOARD)
+  └─ Sets WOLFHAL_ROOT, BOARD_DIR, CFLAGS += -I$(BOARD_DIR)
 
 Makefile
   └─ OBJS += hal/wolfhal.o (replaces hal/$(TARGET).o)
-  └─ OBJS += hal/boards/$(BOARD)/wolfHAL_board.o
-  └─ include hal/boards/$(BOARD)/board.mk
+  └─ OBJS += $(BOARD_DIR)/wolfHAL_board.o
+  └─ include $(BOARD_DIR)/board.mk
 
 hal/wolfhal.c  (generic — calls whal_Flash_Write, whal_Uart_Send, etc.)
   └─ #include "wolfHAL_board.h"  (resolved via -I to the board directory)
@@ -87,13 +87,35 @@ WOLFHAL=1
 - `TARGET` keeps its usual meaning (the chip family).
 - `WOLFHAL=1` swaps the legacy `hal/$(TARGET).c` for the generic wolfHAL shim
   (`hal/wolfhal.c`) and includes the per-board build pieces.
-- `BOARD` selects the board directory under `hal/boards/`.
+- `BOARD` names the board. By default its files are read from
+  `hal/boards/$(BOARD)/`.
+- `BOARD_DIR` (optional) overrides the board directory, so board files can live
+  outside the wolfBoot tree. See [External Boards](#external-boards).
 
 See `config/examples/*_wolfhal_*.config` for complete examples.
 
+### External Boards
+
+Set `BOARD_DIR` to a directory containing the same three files as an in-tree
+board (`wolfHAL_board.h`, `wolfHAL_board.c` and `board.mk`):
+
+```
+make WOLFHAL=1 BOARD=my_board BOARD_DIR=/path/to/my_board
+```
+
+A relative `BOARD_DIR` is resolved against the wolfBoot root, for both the
+bootloader and the test application. Notes for an external `board.mk`:
+
+- Paths relative to the wolfBoot root, such as wolfBoot's own linker scripts
+  (`$(call LSCRIPT_IN_DEFAULT,hal/stm32wb.ld)`), still work. Refer to files
+  shipped with the board as `$(BOARD_DIR)/...`.
+- `wolfHAL_board.o` is built inside `BOARD_DIR`. Pass the same `BOARD` and
+  `BOARD_DIR` to `make clean` to remove it.
+
 ## Adding a New Board
 
-To add a new board, create a directory `hal/boards/<board_name>/` with three files:
+To add a new board, create a directory `hal/boards/<board_name>/` (or an
+external directory passed as `BOARD_DIR`) with three files:
 
 ### 1. `wolfHAL_board.h` — Driver Headers and Pin Enums
 
@@ -247,6 +269,131 @@ that are substituted at build time. When `RAM_CODE=1`, these expand to
 `EXCLUDE_FILE` rules that move the flash driver's `.text` and `.rodata` sections from
 flash into the `.data` section (loaded to RAM at startup). When `RAM_CODE` is not
 set, all code remains in flash as normal.
+
+## UART Flash
+
+wolfHAL boards can place the update and swap partitions on a remote host over
+UART with `UART_FLASH=1` (see [remote_flash.md](remote_flash.md)). The target
+side uses the generic `src/uart_flash.c` protocol, and the host side is
+`tools/uart-flash-server`.
+
+### How It Works
+
+`hal/wolfhal.c` provides the UART functions that `src/uart_flash.c` calls, on
+top of the wolfHAL UART API and `BOARD_UART_FLASH_DEV`:
+
+| Function | Behavior |
+|---|---|
+| `uart_init` | No-op; the board configures the UART in `hal_init` |
+| `uart_tx` | Sends one byte with `whal_Uart_Send`; returns `1` on success, `-1` on error |
+| `uart_rx` | Receives one byte with `whal_Uart_Recv`; returns `1` on success, `0` on timeout |
+
+With `WOLFHAL=1`, the build defines `WOLFHAL` and does not link the legacy
+`hal/uart/uart_drv_<target>.c` driver.
+
+On legacy targets, `uart_rx` returns immediately and `src/uart_flash.c` builds
+its timeouts by calling it in a loop. With `WOLFHAL` defined, `uart_rx` waits
+on the board's UART timeout instead, so `src/uart_flash.c` calls it once per
+wait: each ACK, each read byte, and the final erase ACK get one board timeout.
+`ext_flash_lock` and `ext_flash_unlock` also wait for an ACK that
+`uart-flash-server` does not send, so each one costs a full timeout.
+
+### Board Requirements
+
+1. **`BOARD_UART_FLASH_DEV`.** Define it in `wolfHAL_board.h`. It can be the
+   debug UART:
+
+   ```c
+   #define BOARD_UART_FLASH_DEV BOARD_UART_DEV
+   ```
+
+   If it is the same UART as debug output, do not combine `UART_FLASH=1` with
+   `DEBUG_UART=1`, since log text would corrupt the protocol stream.
+2. **UART enabled without `DEBUG_UART`.** Initialize the UART clocks, pins and
+   device in `hal_init` (and deinitialize them in `hal_prepare_boot`) when
+   either `DEBUG_UART` or `UART_FLASH` is set, and link the GPIO and UART
+   drivers in `board.mk` for both:
+
+   ```makefile
+   ifneq (,$(filter 1,$(DEBUG_UART) $(UART_FLASH)))
+     WOLFHAL_OBJS+=$(WOLFHAL_ROOT)/src/gpio/<family>_gpio.o
+     WOLFHAL_OBJS+=$(WOLFHAL_ROOT)/src/uart/<family>_uart.o
+   endif
+   ```
+3. **Timeouts enabled.** Do not define `WHAL_CFG_NO_TIMEOUT` when
+   `UART_FLASH=1`:
+
+   ```makefile
+   ifneq ($(UART_FLASH),1)
+     CFLAGS+=-DWHAL_CFG_NO_TIMEOUT
+   endif
+   ```
+4. **A UART timeout.** Point the UART config's `.timeout` at a `whal_Timeout`.
+   Without one, `whal_Uart_Recv` waits forever and boot hangs at the first
+   unanswered wait. The timeout bounds both `Send` and `Recv`, so it must be
+   longer than one byte time and long enough for the host to answer.
+
+### Timeout Example
+
+The `stm32wb_nucleo` board counts register polls rather than time, which needs
+no timer peripheral. wolfHAL calls `GetTick` once per status register read, so
+`timeoutTicks` is a poll count. 500000 polls matches the legacy loop count.
+
+`wolfHAL_board.h`:
+
+```c
+#ifdef UART_FLASH
+extern whal_Timeout g_wbUartTimeout;
+#define BOARD_UART_TIMEOUT (&g_wbUartTimeout)
+#else
+#define BOARD_UART_TIMEOUT NULL
+#endif
+
+#define WHAL_CFG_STM32WB_UART_DEV { \
+    .base = WHAL_STM32WB55_UART1_BASE, \
+    .cfg = (void *)&(const whal_Stm32wb_Uart_Cfg){ \
+        .brr = WHAL_STM32WB_UART_BRR(64000000, 115200), \
+        .timeout = BOARD_UART_TIMEOUT, \
+    }, \
+}
+```
+
+`wolfHAL_board.c`:
+
+```c
+#ifdef UART_FLASH
+#define UART_FLASH_TIMEOUT_POLLS 500000
+
+static uint32_t g_pollCount;
+
+static uint32_t board_poll_tick(void)
+{
+    return ++g_pollCount;
+}
+
+whal_Timeout g_wbUartTimeout = {
+    .timeoutTicks = UART_FLASH_TIMEOUT_POLLS,
+    .GetTick = board_poll_tick,
+};
+#endif
+```
+
+A poll count depends on CPU speed. A board that needs a timeout in real time
+can provide a time-based `GetTick`, such as one driven by SysTick, instead.
+
+### Building and Testing
+
+```
+cp config/examples/stm32wb-uart-flash-encryption.config .config
+make WOLFHAL=1 BOARD=stm32wb_nucleo
+```
+
+To run an encrypted update over UART flash on a NUCLEO-WB55 board with
+`st-flash` and `uart-flash-server`:
+
+```
+make test-enc-update WOLFHAL=1 BOARD=stm32wb_nucleo
+```
 
 ## Test Application
 

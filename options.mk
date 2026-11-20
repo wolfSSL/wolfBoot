@@ -1248,7 +1248,9 @@ ifeq ($(EXT_FLASH),1)
   ifeq ($(UART_FLASH),1)
     CFLAGS+=-D"UART_FLASH=1"
     OBJS+=src/uart_flash.o
-    WOLFCRYPT_OBJS+=hal/uart/uart_drv_$(UART_TARGET).o
+    ifneq ($(WOLFHAL),1)
+      WOLFCRYPT_OBJS+=hal/uart/uart_drv_$(UART_TARGET).o
+    endif
   endif
 endif
 

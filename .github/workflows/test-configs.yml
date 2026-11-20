@@ -1481,6 +1481,13 @@ jobs:
       config-file: ./config/examples/stm32wb.config
       make-args: WOLFHAL=1 BOARD=stm32wb_nucleo
 
+  stm32wb_wolfhal_uart_flash_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32wb-uart-flash-encryption.config
+      make-args: WOLFHAL=1 BOARD=stm32wb_nucleo
+
   stm32wba_wolfhal_test:
     uses: ./.github/workflows/test-build.yml
     with:
