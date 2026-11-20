@@ -340,7 +340,7 @@ static int ___vsnprintf(char *buf, unsigned int size, const char *fmt, va_list a
                 if (pos < (int)size - 1)
                     buf[pos++] = (char)va_arg(argp, int);
                 break;
-#ifdef UART_PRINTF_FLOAT
+#ifdef PRINTF_FLOAT
             case 'f': case 'e': case 'g':
             {
                 double val = va_arg(argp, double);
@@ -368,7 +368,7 @@ static int ___vsnprintf(char *buf, unsigned int size, const char *fmt, va_list a
                 }
                 break;
             }
-#endif /* UART_PRINTF_FLOAT */
+#endif /* PRINTF_FLOAT */
             default:
                 break;
         }
