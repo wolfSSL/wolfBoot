@@ -40,9 +40,6 @@ extern whClientContext hsmClientCtx;
 
 #define BASE_FW_VERSION 1
 
-/* Empty _init for the SSW C init hook. */
-void _init(void) {}
-
 /* Hang on flash HAL faults. */
 void wolfBoot_panic(void)
 {

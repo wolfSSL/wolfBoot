@@ -30,21 +30,13 @@
 #include "loader.h" /* for wolfBoot_panic */
 #include "printf.h"
 
-/* iLLD headers */
-#include "Ifx_Types.h"
-#include "IfxAsclin.h"
-#include "IfxAsclin_PinMap.h"
-#include "IfxCpu.h"
-#include "IfxWtu.h"
-#ifndef TARGET_aurix_tc4xx_csrm
-#include "IfxClock.h"
-#endif
+/* wolfLLD headers */
+#include "tc4/tc4.h"
+#include "tc4/tc4_clock.h"
+#include "tc4/tc4_uart.h"
+#include "tc4/tc4_wtu.h"
 
 #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
-
-#include "IfxApApu.h"
-#include "IfxApProt.h"
-#include "IfxSrc.h"
 
 /* wolfHSM headers */
 #include "wolfhsm/wh_client.h"
@@ -52,6 +44,7 @@
 /* wolfHSM AURIX TC4xx port headers */
 #include "tchsm_topology.h"
 #include "tchsm_client.h"
+#include "tchsm_notify.h"
 #include "tchsm_spr_apu.h"
 
 /* wolfHSM client ID for the HSM server.
@@ -392,55 +385,41 @@ static int RAMFUNCTION programBytesToErasedFlash(uint32_t       address,
 
 #if defined(DEBUG_UART) || defined(UART_FLASH)
 
-#define TC4_UART (&MODULE_ASCLIN0)
 #define TC4_UART_BAUD (115200u)
-#define TC4_UART_FIFO_SIZE (16u)
+
+/* ASCLIN0 on P14.0 (TX) and P14.1 (RX). The CSRM may run before the host
+ * has set up the clock tree, so the divider follows the live fASCLINF. */
+static tc4_uartpin_t tc4Uart = {
+    .asclin    = 0u,
+    .txport    = 14u,
+    .txpin     = 0u,
+    .txalt     = 2u,
+    .rxport    = 14u,
+    .rxpin     = 1u,
+    .rxsel     = 0u,
+};
 
 int  uart_tx(const uint8_t c);
 int  uart_rx(uint8_t* c);
 void uart_init(void);
 void uart_write(const char* buf, unsigned int sz);
 
+static int tc4UartReady = 0;
+
 void uart_init(void)
 {
-    Ifx_ASCLIN* u = TC4_UART;
-
-    IfxAsclin_enableModule(u);
-    IfxAsclin_setClockSource(u, IfxAsclin_ClockSource_noClock);
-    IfxAsclin_setFrameMode(u, IfxAsclin_FrameMode_initialise);
-    IfxAsclin_setPrescaler(u, 1);
-    IfxAsclin_setClockSource(u, IfxAsclin_ClockSource_ascFastClock);
-    (void)IfxAsclin_setBitTiming(
-        u, (float32)TC4_UART_BAUD, IfxAsclin_OversamplingFactor_16,
-        IfxAsclin_SamplePointPosition_8, IfxAsclin_SamplesPerBit_three);
-    IfxAsclin_setClockSource(u, IfxAsclin_ClockSource_noClock);
-
-    IfxAsclin_enableParity(u, FALSE);
-    IfxAsclin_setStopBit(u, IfxAsclin_StopBit_1);
-    IfxAsclin_setShiftDirection(u, IfxAsclin_ShiftDirection_lsbFirst);
-    IfxAsclin_setDataLength(u, IfxAsclin_DataLength_8);
-    IfxAsclin_setTxFifoInletWidth(u, IfxAsclin_TxFifoInletWidth_1);
-    IfxAsclin_setRxFifoOutletWidth(u, IfxAsclin_RxFifoOutletWidth_1);
-    IfxAsclin_setFrameMode(u, IfxAsclin_FrameMode_asc);
-
-    IfxAsclin_initTxPin(&IfxAsclin0_TX_F_P14_0_OUT, IfxPort_OutputMode_pushPull,
-                        IfxPort_PadDriver_cmosAutomotiveSpeed1);
-    IfxAsclin_initRxPin(&IfxAsclin0_RXA_F_P14_1_IN, IfxPort_InputMode_pullUp,
-                        IfxPort_PadDriver_cmosAutomotiveSpeed1);
-
-    IfxAsclin_setClockSource(u, IfxAsclin_ClockSource_ascFastClock);
-    IfxAsclin_disableAllFlags(u);
-    IfxAsclin_clearAllFlags(u);
-    IfxAsclin_flushTxFifo(u);
-    IfxAsclin_enableTxFifoOutlet(u, TRUE);
+    tc4UartReady =
+        (tc4_uart_SetBaud(&tc4Uart, tc4_clock_GetAsclinFastFrequency(),
+                          TC4_UART_BAUD) == 0) &&
+        (tc4_uart_Init(&tc4Uart) == 0);
 }
 
 int uart_tx(const uint8_t c)
 {
-    Ifx_ASCLIN* u = TC4_UART;
-    while (IfxAsclin_getTxFifoFillLevel(u) >= TC4_UART_FIFO_SIZE) {
+    if (!tc4UartReady) {
+        return 0;
     }
-    IfxAsclin_writeTxData(u, c);
+    tc4_uart_Write8(&tc4Uart, c);
     return 1;
 }
 
@@ -461,20 +440,6 @@ void uart_write(const char* buf, unsigned int sz)
     }
 }
 
-/* Block until the TX FIFO has fully drained onto the wire */
-static void uart_flush(void)
-{
-    Ifx_ASCLIN*       u = TC4_UART;
-    volatile uint32_t i;
-
-    while (IfxAsclin_getTxFifoFillLevel(u) != 0u) {
-    }
-    /* Delay in case TC flag is still set from an earlier idle
-     * period while the last frame sits in the shift reg. */
-    for (i = 0; i < 200000u; i++) {
-    }
-}
-
 #endif /* DEBUG_UART || UART_FLASH */
 
 /*
@@ -484,7 +449,7 @@ static void uart_flush(void)
 void hal_init(void)
 {
 #ifdef TARGET_aurix_tc4xx_csrm
-    IfxWtu_disableSecurityWatchdog(IfxWtu_getSecurityWatchdogPassword());
+    tc4_wtu_Disable(TC4_WTU_WDTSEC);
 
     /* The CSRM PFLASH bank must be allocated to the CSRM or the CSCI
      * command writes will fail silently */
@@ -492,8 +457,8 @@ void hal_init(void)
         wolfBoot_panic();
     }
 #else
-    IfxWtu_disableCpuWatchdog(IfxWtu_getCpuWatchdogPassword());
-    IfxWtu_disableSystemWatchdog(IfxWtu_getSystemWatchdogPassword());
+    tc4_wtu_Disable(TC4_WTU_WDTCPU(0u));
+    tc4_wtu_Disable(TC4_WTU_WDTSYS);
 
     /* Refuse to run if a host PFLASH bank has been reallocated to CSRM. */
     if ((*TC4_GP_BKALLOC & 0xFu) != 0u) {
@@ -527,15 +492,16 @@ void hal_prepare_boot(void)
     /* Final print, then drain so the clock switch below cannot corrupt
      * in-flight characters */
     wolfBoot_printf("hal_prepare_boot\n");
-    uart_flush();
-    IfxAsclin_setClockSource(TC4_UART, IfxAsclin_ClockSource_noClock);
-    IfxAsclin_disableModule(TC4_UART);
+    if (tc4UartReady) {
+        tc4_uart_BlockOnTC(&tc4Uart);
+    }
 #endif
 
 #ifndef TARGET_aurix_tc4xx_csrm
-    /* Host cores must return the clock tree to the backup clock and power the
-     * PLLs down, as the iLLD SSW can't handle already initialized PLLs. */
-    (void)IfxClock_switchToBackupClock(&IfxClock_defaultClockConfig);
+    /* The application starts on the backup clock; the PLLs stay powered */
+    if (tc4_clock_SwitchToBackup() != 0) {
+        wolfBoot_panic();
+    }
 #endif
 }
 
@@ -552,9 +518,7 @@ void RAMFUNCTION arch_reboot(void)
     while (1) {
     }
 #else
-    IfxCpu_triggerSwReset();
-    while (1) {
-    }
+    tc4_TriggerSwReset();
 #endif
 }
 
@@ -787,23 +751,12 @@ volatile int g_tc4_hsmc_hw_rc;
 /* CPU0 hardware setup for HsmHost transport. */
 static int tc4_hsmc_hw_init(void)
 {
-    {
-        IfxApApu_ApuConfig apConfig;
-        IfxApApu_initConfig(&apConfig);
-        const unsigned long srcTagMask =
-            (1UL << IfxApProt_TagId_cpu0d) | (1UL << IfxApProt_TagId_cpu0ds) |
-            (1UL << IfxApProt_TagId_cpu1d) | (1UL << IfxApProt_TagId_cpu1ds) |
-            (1UL << IfxApProt_TagId_cpucsd) | (1UL << IfxApProt_TagId_cpucsds);
-        apConfig.wraTagId = srcTagMask;
-        apConfig.rdaTagId = srcTagMask;
-        apConfig.wrbTagId = 0U;
-        apConfig.rdbTagId = 0U;
-        IfxSrc_configureAccessToSrcs(&apConfig);
-    }
+    const uint32_t srcTagMask =
+        TCHSM_APPROT_TAGS_FOR_CORE(0u) | TCHSM_APPROT_TAGS_FOR_CORE(1u) |
+        TCHSM_APPROT_TAGS_FOR_CORE(TC4_CORE_ID_CPUCS);
 
-    /* Probe SR0 to confirm SRC ACCEN writes are enabled. */
-    SRC_GPSR4_SR0.U = 0x00006014u;
-    if (((SRC_GPSR4_SR0.U >> 12) & 0xFu) != 6u) {
+    if (tchsm_Notify_OpenSrcs(TCHSM_HSMHOST_CLIENT_APP0, srcTagMask) !=
+        WH_ERROR_OK) {
         return -1;
     }
 
