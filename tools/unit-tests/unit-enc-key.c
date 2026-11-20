@@ -42,6 +42,10 @@ const char *argv0;
 
 #include "unit-mock-flash.c"
 
+#ifdef NVM_FLASH_WRITEONCE
+static int active_nvm_copy;
+#endif
+
 static void reset_erase_log(void)
 {
     mock_flash_erase_count = 0;
@@ -66,10 +70,22 @@ static void check_erase_log(void)
 {
     uint8_t expected[WOLFBOOT_PARTITION_SIZE / MOCK_FLASH_ERASE_UNIT] = { 0 };
     uintptr_t base = WOLFBOOT_PARTITION_BOOT_ADDRESS;
+#ifdef NVM_FLASH_WRITEONCE
+    if (active_nvm_copy == 1) {
+        mark_expected_range(expected, base + WOLFBOOT_PARTITION_SIZE -
+            WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
+    }
+    else {
+        mark_expected_range(expected, base + WOLFBOOT_PARTITION_SIZE -
+            (2 * WOLFBOOT_SECTOR_SIZE), WOLFBOOT_SECTOR_SIZE);
+    }
+#else
     uintptr_t key_addr = base + ENCRYPT_TMP_SECRET_OFFSET;
     uintptr_t magic_addr = key_addr - sizeof(uint32_t);
+#endif
     size_t i, expected_count = 0;
 
+#ifndef NVM_FLASH_WRITEONCE
 #ifdef FLAGS_HOME
     mark_expected_range(expected, magic_addr -
         (PART_BOOT_ENDFLAGS - PART_UPDATE_ENDFLAGS), sizeof(uint32_t));
@@ -78,6 +94,7 @@ static void check_erase_log(void)
     mark_expected_range(expected, key_addr, ENCRYPT_KEY_SIZE);
     mark_expected_range(expected, key_addr + ENCRYPT_KEY_SIZE,
         ENCRYPT_NONCE_SIZE);
+#endif
 
     for (i = 0; i < sizeof(expected); i++) {
         if (!expected[i])
@@ -99,7 +116,16 @@ static void check_flash_contents(const uint8_t *key, const uint8_t *nonce,
 {
     const uint8_t *boot = (const uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     uintptr_t base = WOLFBOOT_PARTITION_BOOT_ADDRESS;
+#ifdef NVM_FLASH_WRITEONCE
+    uintptr_t active_base = base + WOLFBOOT_PARTITION_SIZE -
+        ((active_nvm_copy ? 2 : 1) * WOLFBOOT_SECTOR_SIZE);
+    uintptr_t erased_base = base + WOLFBOOT_PARTITION_SIZE -
+        ((active_nvm_copy ? 1 : 2) * WOLFBOOT_SECTOR_SIZE);
+    uintptr_t key_addr = active_base +
+        (ENCRYPT_TMP_SECRET_OFFSET % WOLFBOOT_SECTOR_SIZE);
+#else
     uintptr_t key_addr = base + ENCRYPT_TMP_SECRET_OFFSET;
+#endif
     uintptr_t magic_addr = key_addr - sizeof(uint32_t);
     uint8_t magic[sizeof(uint32_t)];
     size_t i;
@@ -108,6 +134,15 @@ static void check_flash_contents(const uint8_t *key, const uint8_t *nonce,
     for (i = 0; i < WOLFBOOT_PARTITION_SIZE; i++) {
         uint8_t expected = 0x5A;
 
+#ifdef NVM_FLASH_WRITEONCE
+        if ((i >= erased_base - base) &&
+                (i < erased_base - base + WOLFBOOT_SECTOR_SIZE))
+            expected = FLASH_BYTE_ERASED;
+        if ((i >= active_base - base + WOLFBOOT_SECTOR_SIZE -
+                    sizeof(uint32_t)) &&
+                (i < active_base - base + WOLFBOOT_SECTOR_SIZE))
+            expected = FLASH_BYTE_ERASED;
+#endif
 #ifdef FLAGS_HOME
         uintptr_t flags_magic = magic_addr -
             (PART_BOOT_ENDFLAGS - PART_UPDATE_ENDFLAGS);
@@ -120,10 +155,10 @@ static void check_flash_contents(const uint8_t *key, const uint8_t *nonce,
             expected = magic[i - (magic_addr - base)];
         if (i >= key_addr - base &&
                 i < key_addr - base + ENCRYPT_KEY_SIZE)
-            expected = erased ? 0xFF : key[i - (key_addr - base)];
+            expected = erased ? FLASH_BYTE_ERASED : key[i - (key_addr - base)];
         if (i >= key_addr - base + ENCRYPT_KEY_SIZE &&
                 i < key_addr - base + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE)
-            expected = erased ? 0xFF :
+            expected = erased ? FLASH_BYTE_ERASED :
                 nonce[i - (key_addr - base) - ENCRYPT_KEY_SIZE];
         ck_assert_msg(boot[i] == expected,
             "unexpected byte at BOOT offset 0x%lx: got 0x%02x expected 0x%02x",
@@ -159,10 +194,21 @@ START_TEST(test_set_and_erase_encrypt_key)
     ck_assert_int_ge(ret, 0);
 
     memset(boot, 0x5A, WOLFBOOT_PARTITION_SIZE);
+#ifdef NVM_FLASH_WRITEONCE
+    memset(boot + WOLFBOOT_PARTITION_SIZE - (2 * WOLFBOOT_SECTOR_SIZE),
+        FLASH_BYTE_ERASED, WOLFBOOT_SECTOR_SIZE);
+    memset(boot + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t),
+        FLASH_BYTE_ERASED, sizeof(uint32_t));
+    XMEMCPY((void *)(PART_BOOT_ENDFLAGS - sizeof(wolfboot_magic_trail)),
+        &wolfboot_magic_trail, sizeof(wolfboot_magic_trail));
+#endif
     reset_erase_log();
     ret = wolfBoot_set_encrypt_key(key, nonce);
     ck_assert_int_eq(ret, 0);
     ck_assert(locked);
+#ifdef NVM_FLASH_WRITEONCE
+    active_nvm_copy = 1;
+#endif
     check_erase_log();
     check_flash_contents(key, nonce, 0);
     check_cache_scrubbed();
@@ -171,10 +217,15 @@ START_TEST(test_set_and_erase_encrypt_key)
     ret = wolfBoot_erase_encrypt_key();
     ck_assert_int_eq(ret, 0);
     ck_assert(locked);
+#ifdef NVM_FLASH_WRITEONCE
+    active_nvm_copy = 0;
+#endif
     check_erase_log();
     check_flash_contents(key, nonce, 1);
     check_cache_scrubbed();
 
+#ifndef NVM_FLASH_WRITEONCE
+    /* The failure sequence below assumes ordinary, non-ping-pong key storage. */
     reset_erase_log();
     hal_flash_erase_fail = 1;
     ret = wolfBoot_set_encrypt_key(key, nonce);
@@ -209,6 +260,7 @@ START_TEST(test_set_and_erase_encrypt_key)
     ck_assert_int_eq(ret, -1);
     ck_assert(locked);
     check_cache_scrubbed();
+#endif
 }
 END_TEST
 
