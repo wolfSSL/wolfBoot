@@ -1049,7 +1049,7 @@ ifeq ($(WOLFHAL),1)
     $(error BOARD=$(BOARD) has no hal/boards/$(BOARD)/board.mk)
   endif
   WOLFHAL_ROOT?=$(WOLFBOOT_ROOT)/lib/wolfHAL
-  CFLAGS+=-I$(WOLFHAL_ROOT) -DWHAL_CFG_NO_TIMEOUT -I$(WOLFBOOT_ROOT)/hal/boards/$(BOARD)
+  CFLAGS+=-I$(WOLFHAL_ROOT) -I$(WOLFBOOT_ROOT)/hal/boards/$(BOARD)
   DEBUG_UART=1
   APP_OBJS+=board_$(BOARD).o
   include $(WOLFBOOT_ROOT)/hal/boards/$(BOARD)/board.mk
@@ -1057,7 +1057,10 @@ endif
 
 ifeq ($(UART_FLASH),1)
   CFLAGS+=-D"UART_FLASH=1"
-  APP_OBJS+= ../src/uart_flash.o ../hal/uart/uart_drv_$(UART_TARGET).o
+  APP_OBJS+=../src/uart_flash.o
+  ifneq ($(WOLFHAL),1)
+    APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
+  endif
 else ifeq ($(TARGET),stm32wb)
   # With WOLFHAL=1, hal/wolfhal.c + the wolfHAL UART driver provide
   # uart_write; the legacy driver would collide.

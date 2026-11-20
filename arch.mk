@@ -1251,7 +1251,7 @@ endif
 
 ifeq ($(WOLFHAL),1)
   WOLFHAL_ROOT?=$(WOLFBOOT_ROOT)/lib/wolfHAL
-  CFLAGS+=-I$(WOLFHAL_ROOT) -Ihal/boards/$(BOARD)
+  CFLAGS+=-DWOLFHAL -I$(WOLFHAL_ROOT) -Ihal/boards/$(BOARD)
 endif
 
 
