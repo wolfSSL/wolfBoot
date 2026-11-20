@@ -1045,14 +1045,14 @@ ifeq ($(WOLFHAL),1)
   ifeq ($(strip $(BOARD)),)
     $(error WOLFHAL=1 requires BOARD to be set, e.g. BOARD=stm32wb_nucleo)
   endif
-  ifeq ($(wildcard $(WOLFBOOT_ROOT)/hal/boards/$(BOARD)/board.mk),)
-    $(error BOARD=$(BOARD) has no hal/boards/$(BOARD)/board.mk)
+  ifeq ($(wildcard $(BOARD_DIR)/board.mk),)
+    $(error BOARD=$(BOARD) has no $(BOARD_DIR)/board.mk)
   endif
   WOLFHAL_ROOT?=$(WOLFBOOT_ROOT)/lib/wolfHAL
-  CFLAGS+=-I$(WOLFHAL_ROOT) -I$(WOLFBOOT_ROOT)/hal/boards/$(BOARD)
+  CFLAGS+=-I$(WOLFHAL_ROOT) -I$(BOARD_DIR)
   DEBUG_UART=1
   APP_OBJS+=board_$(BOARD).o
-  include $(WOLFBOOT_ROOT)/hal/boards/$(BOARD)/board.mk
+  include $(BOARD_DIR)/board.mk
 endif
 
 ifeq ($(UART_FLASH),1)
@@ -1942,7 +1942,7 @@ lpc55s69_ns/%.o: %.c
 	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 
-board_$(BOARD).o: ../hal/boards/$(BOARD)/wolfHAL_board.c
+board_$(BOARD).o: $(BOARD_DIR)/wolfHAL_board.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -DDEBUG_UART -c $(OUTPUT_FLAG) $@ $<
 

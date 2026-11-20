@@ -1251,7 +1251,9 @@ endif
 
 ifeq ($(WOLFHAL),1)
   WOLFHAL_ROOT?=$(WOLFBOOT_ROOT)/lib/wolfHAL
-  CFLAGS+=-DWOLFHAL -I$(WOLFHAL_ROOT) -Ihal/boards/$(BOARD)
+  BOARD_DIR?=hal/boards/$(BOARD)
+  override BOARD_DIR:=$(if $(filter /%,$(BOARD_DIR)),$(BOARD_DIR),$(WOLFBOOT_ROOT)/$(BOARD_DIR))
+  CFLAGS+=-DWOLFHAL -I$(WOLFHAL_ROOT) -I$(BOARD_DIR)
 endif
 
 

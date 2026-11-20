@@ -52,12 +52,12 @@ config/examples/<chip>_wolfhal_<board>.config
   └─ TARGET=<chip>  BOARD=<board>  WOLFHAL=1
 
 arch.mk
-  └─ Sets WOLFHAL_ROOT, CFLAGS += -Ihal/boards/$(BOARD)
+  └─ Sets WOLFHAL_ROOT, BOARD_DIR, CFLAGS += -I$(BOARD_DIR)
 
 Makefile
   └─ OBJS += hal/wolfhal.o (replaces hal/$(TARGET).o)
-  └─ OBJS += hal/boards/$(BOARD)/wolfHAL_board.o
-  └─ include hal/boards/$(BOARD)/board.mk
+  └─ OBJS += $(BOARD_DIR)/wolfHAL_board.o
+  └─ include $(BOARD_DIR)/board.mk
 
 hal/wolfhal.c  (generic — calls whal_Flash_Write, whal_Uart_Send, etc.)
   └─ #include "wolfHAL_board.h"  (resolved via -I to the board directory)
@@ -87,13 +87,35 @@ WOLFHAL=1
 - `TARGET` keeps its usual meaning (the chip family).
 - `WOLFHAL=1` swaps the legacy `hal/$(TARGET).c` for the generic wolfHAL shim
   (`hal/wolfhal.c`) and includes the per-board build pieces.
-- `BOARD` selects the board directory under `hal/boards/`.
+- `BOARD` names the board. By default its files are read from
+  `hal/boards/$(BOARD)/`.
+- `BOARD_DIR` (optional) overrides the board directory, so board files can live
+  outside the wolfBoot tree. See [External Boards](#external-boards).
 
 See `config/examples/*_wolfhal_*.config` for complete examples.
 
+### External Boards
+
+Set `BOARD_DIR` to a directory containing the same three files as an in-tree
+board (`wolfHAL_board.h`, `wolfHAL_board.c` and `board.mk`):
+
+```
+make WOLFHAL=1 BOARD=my_board BOARD_DIR=/path/to/my_board
+```
+
+A relative `BOARD_DIR` is resolved against the wolfBoot root, for both the
+bootloader and the test application. Notes for an external `board.mk`:
+
+- Paths relative to the wolfBoot root, such as wolfBoot's own linker scripts
+  (`$(call LSCRIPT_IN_DEFAULT,hal/stm32wb.ld)`), still work. Refer to files
+  shipped with the board as `$(BOARD_DIR)/...`.
+- `wolfHAL_board.o` is built inside `BOARD_DIR`. Pass the same `BOARD` and
+  `BOARD_DIR` to `make clean` to remove it.
+
 ## Adding a New Board
 
-To add a new board, create a directory `hal/boards/<board_name>/` with three files:
+To add a new board, create a directory `hal/boards/<board_name>/` (or an
+external directory passed as `BOARD_DIR`) with three files:
 
 ### 1. `wolfHAL_board.h` — Driver Headers and Pin Enums
 
