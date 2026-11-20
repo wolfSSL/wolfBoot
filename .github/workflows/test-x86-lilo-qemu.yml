@@ -1,0 +1,41 @@
+name: X86 LILO (legacy BIOS/MBR) QEMU test
+
+on:
+  pull_request:
+    branches: [ '*' ]
+jobs:
+  lilo_qemu_test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-x86:v1.29
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: install req
+        run: |
+          apt-get update -o Acquire::Retries=3
+          apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 dosfstools fdisk cpio
+          # A stock distribution bzImage to boot, without installing it. The
+          # kernel itself ships in linux-binary-<abi>, under /usr/lib/modules.
+          mkdir -p /tmp/kernel && chmod 777 /tmp/kernel && cd /tmp/kernel
+          abi=$(apt-cache depends linux-image-amd64 | awk '/Depends: linux-image-/ {sub("linux-image-", "", $2); print $2; exit}')
+          apt-get download linux-binary-$abi
+          dpkg-deb -x linux-binary-${abi}_*.deb .
+          cp usr/lib/modules/$abi/vmlinuz /tmp/vmlinuz
+
+      - name: build
+        run: |
+          cp config/examples/x86_64_lilo.config .config
+          make keytools
+          make
+
+      - name: run test
+        run: |
+          python3 tools/lilo/test/run-qemu.py -k /tmp/vmlinuz
