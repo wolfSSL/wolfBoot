@@ -65,7 +65,12 @@
 #   elif defined(DEBUG_UART)
         /* use minimal printf support in string.h */
         void uart_printf(const char* fmt, ...);
-#       define wolfBoot_printf(_f_, ...) uart_printf(_f_, ##__VA_ARGS__)
+#       if defined(__CCRX__)
+            /* CC-RX has no ##__VA_ARGS__ */
+#           define wolfBoot_printf uart_printf
+#       else
+#           define wolfBoot_printf(_f_, ...) uart_printf(_f_, ##__VA_ARGS__)
+#       endif
 #   elif defined(__CCRX__)
 #       define wolfBoot_printf printf
 #   elif defined(WOLFBOOT_LOG_PRINTF)

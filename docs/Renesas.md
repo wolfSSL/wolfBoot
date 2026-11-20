@@ -16,6 +16,9 @@ Platforms Supported:
 * Renesas RX (RX71M) (software crypto, no TSIP)
   - [docs/Targets.md#renesas-rx71m](/docs/Targets.md#renesas-rx71m)
   - [IDE/Renesas/e2studio/RX71M/Readme.md](/IDE/Renesas/e2studio/RX71M/Readme.md)
+* Renesas RX (RX24T) (software crypto)
+  - [docs/Targets.md#renesas-rx24t](/docs/Targets.md#renesas-rx24t)
+  - [IDE/Renesas/e2studio/RX24T/Readme.md](/IDE/Renesas/e2studio/RX24T/Readme.md)
 
 All of the Renesas examples include an e2Studio project.
 The Renesas RX parts support using wolfBoot Makefile's with the rx-elf-gcc cross-compiler and example .config files.

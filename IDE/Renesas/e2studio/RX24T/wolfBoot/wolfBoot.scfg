@@ -1,0 +1,526 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<smc>
+    <general version="2.0.0.0">
+        <configuration active="true" id="com.renesas.smc.toolchain.rxc.configuration.release">
+            <property id="com.renesas.smc.service.project.buildArtefactType" values="com.renesas.smc.service.project.buildArtefactType.exe"/>
+            <toolchain id="com.renesas.smc.toolchain.rxc.toolchain.rxc">
+                <option id="com.renesas.smc.toolchain.option.language" key="com.renesas.smc.toolchain.option.language.c"/>
+                <option id="com.renesas.smc.toolchain.option.buildArtefactType" key="com.renesas.smc.toolchain.option.buildArtefactType.exe"/>
+                <option id="com.renesas.smc.toolchain.option.rtos" key="com.renesas.smc.toolchain.option.rtos.none"/>
+                <option id="com.renesas.smc.toolchain.option.dual" key="com.renesas.smc.toolchain.option.dual.false"/>
+            </toolchain>
+        </configuration>
+        <platform id="R5F524TAAxFP"/>
+        <option id="board" value="RSKRX24T (V1.03)"/>
+    </general>
+    <tool id="Clock">
+        <option enabled="true" id="vccinput" selection="textinputitem">
+            <item enabled="true" id="textinputitem" input="3.3" value="3.300"/>
+        </option>
+        <option enabled="true" id="mainclockenable" selection="uncheck">
+            <item enabled="true" id="check"/>
+            <item enabled="true" id="uncheck"/>
+        </option>
+        <option enabled="false" id="mainsourcebox" selection="srcR">
+            <item enabled="true" id="srcR"/>
+            <item enabled="true" id="srcEOI"/>
+        </option>
+        <option enabled="false" id="mainfrequency" selection="textinputitem">
+            <item enabled="true" id="textinputitem" input="20" value="20.000000"/>
+        </option>
+        <option enabled="false" id="mainwaitcycle" selection="sBox8192">
+            <item enabled="true" id="sBox2"/>
+            <item enabled="true" id="sBox1024"/>
+            <item enabled="true" id="sBox2048"/>
+            <item enabled="true" id="sBox4096"/>
+            <item enabled="true" id="sBox8192"/>
+            <item enabled="true" id="sBox16384"/>
+            <item enabled="true" id="sBox32768"/>
+            <item enabled="true" id="sBox65536"/>
+        </option>
+        <option enabled="false" id="mainwaittime" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="2048"/>
+        </option>
+        <option enabled="true" id="hococlockenable" selection="check">
+            <item enabled="true" id="check"/>
+            <item enabled="true" id="uncheck"/>
+        </option>
+        <option enabled="true" id="hocooscenable" selection="uncheck">
+            <item enabled="true" id="check"/>
+            <item enabled="true" id="uncheck"/>
+        </option>
+        <option enabled="true" id="hocofrequency" selection="frq32">
+            <item enabled="true" id="frq32"/>
+            <item enabled="true" id="frq64"/>
+        </option>
+        <option enabled="true" id="hocowaitcycle" selection="sBox142">
+            <item enabled="true" id="sBox142"/>
+            <item enabled="false" id="sBox270"/>
+        </option>
+        <option enabled="true" id="hocowaittime" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="35.5"/>
+        </option>
+        <option enabled="true" id="lococlockenable" selection="uncheck">
+            <item enabled="true" id="check"/>
+            <item enabled="true" id="uncheck"/>
+        </option>
+        <option enabled="false" id="locofrequency" selection="textinputitem">
+            <item enabled="true" id="textinputitem" input="" value="4"/>
+        </option>
+        <option enabled="true" id="iwdtclockenable" selection="uncheck">
+            <item enabled="true" id="check"/>
+            <item enabled="true" id="uncheck"/>
+        </option>
+        <option enabled="false" id="iwdtfrequency" selection="textinputitem">
+            <item enabled="true" id="textinputitem" input="" value="15"/>
+        </option>
+        <option enabled="true" id="pllswitcher" selection="pllhoco">
+            <item enabled="false" id="pllmain" input="" value="20.0"/>
+            <item enabled="true" id="pllhoco" input="" value="32"/>
+        </option>
+        <option enabled="true" id="plldivider" selection="div1-4">
+            <item enabled="false" id="div1-1"/>
+            <item enabled="false" id="div1-2"/>
+            <item enabled="true" id="div1-4"/>
+        </option>
+        <option enabled="true" id="pllmul" selection="mul10-1">
+            <item enabled="false" id="mul4-1"/>
+            <item enabled="false" id="mul4_5-1"/>
+            <item enabled="true" id="mul5-1"/>
+            <item enabled="true" id="mul5_5-1"/>
+            <item enabled="true" id="mul6-1"/>
+            <item enabled="true" id="mul6_5-1"/>
+            <item enabled="true" id="mul7-1"/>
+            <item enabled="true" id="mul7_5-1"/>
+            <item enabled="true" id="mul8-1"/>
+            <item enabled="true" id="mul8_5-1"/>
+            <item enabled="true" id="mul9-1"/>
+            <item enabled="true" id="mul9_5-1"/>
+            <item enabled="true" id="mul10-1"/>
+            <item enabled="false" id="mul10_5-1"/>
+            <item enabled="false" id="mul11-1"/>
+            <item enabled="false" id="mul11_5-1"/>
+            <item enabled="false" id="mul12-1"/>
+            <item enabled="false" id="mul12_5-1"/>
+            <item enabled="false" id="mul13-1"/>
+            <item enabled="false" id="mul13_5-1"/>
+            <item enabled="false" id="mul14-1"/>
+            <item enabled="false" id="mul14_5-1"/>
+            <item enabled="false" id="mul15-1"/>
+            <item enabled="false" id="mul15_5-1"/>
+        </option>
+        <option enabled="true" id="sckswitcher" selection="pll">
+            <item enabled="true" id="pll" input="" value="80000000"/>
+            <item enabled="false" id="main" input="" value="2.0E7"/>
+            <item enabled="true" id="hoco" input="" value="32000000"/>
+            <item enabled="false" id="loco" input="" value="4000000"/>
+        </option>
+        <option enabled="true" id="fclkdivider" selection="comboBox1-4">
+            <item enabled="false" id="comboBox1-1"/>
+            <item enabled="false" id="comboBox1-2"/>
+            <item enabled="true" id="comboBox1-4"/>
+            <item enabled="true" id="comboBox1-8"/>
+            <item enabled="true" id="comboBox1-16"/>
+            <item enabled="true" id="comboBox1-32"/>
+            <item enabled="true" id="comboBox1-64"/>
+        </option>
+        <option enabled="true" id="iclkdivider" selection="comboBox1-1">
+            <item enabled="true" id="comboBox1-1"/>
+            <item enabled="true" id="comboBox1-2"/>
+            <item enabled="true" id="comboBox1-4"/>
+            <item enabled="true" id="comboBox1-8"/>
+            <item enabled="true" id="comboBox1-16"/>
+            <item enabled="true" id="comboBox1-32"/>
+            <item enabled="true" id="comboBox1-64"/>
+        </option>
+        <option enabled="true" id="pclkadivider" selection="comboBox1-1">
+            <item enabled="true" id="comboBox1-1"/>
+            <item enabled="true" id="comboBox1-2"/>
+            <item enabled="true" id="comboBox1-4"/>
+            <item enabled="true" id="comboBox1-8"/>
+            <item enabled="true" id="comboBox1-16"/>
+            <item enabled="true" id="comboBox1-32"/>
+            <item enabled="true" id="comboBox1-64"/>
+        </option>
+        <option enabled="true" id="pclkbdivider" selection="comboBox1-2">
+            <item enabled="false" id="comboBox1-1"/>
+            <item enabled="true" id="comboBox1-2"/>
+            <item enabled="true" id="comboBox1-4"/>
+            <item enabled="true" id="comboBox1-8"/>
+            <item enabled="true" id="comboBox1-16"/>
+            <item enabled="true" id="comboBox1-32"/>
+            <item enabled="true" id="comboBox1-64"/>
+        </option>
+        <option enabled="true" id="pclkddivider" selection="comboBox1-2">
+            <item enabled="false" id="comboBox1-1"/>
+            <item enabled="true" id="comboBox1-2"/>
+            <item enabled="true" id="comboBox1-4"/>
+            <item enabled="true" id="comboBox1-8"/>
+            <item enabled="true" id="comboBox1-16"/>
+            <item enabled="false" id="comboBox1-32"/>
+            <item enabled="false" id="comboBox1-64"/>
+        </option>
+        <option enabled="true" id="fclk" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="20"/>
+        </option>
+        <option enabled="true" id="iclk" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="80"/>
+        </option>
+        <option enabled="true" id="pclka" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="80"/>
+        </option>
+        <option enabled="true" id="pclkb" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="40"/>
+        </option>
+        <option enabled="true" id="pclkd" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="40"/>
+        </option>
+        <option enabled="false" id="cacmclk" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="20.0"/>
+        </option>
+        <option enabled="false" id="caclclk" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="4"/>
+        </option>
+        <option enabled="true" id="cachclk" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="32"/>
+        </option>
+        <option enabled="false" id="cacilclk" selection="textoutputitem">
+            <item enabled="true" id="textoutputitem" input="" value="15"/>
+        </option>
+    </tool>
+    <tool id="Interrupt">
+        <Item currentVect="16" id="BSC_BUSERR" priority="15" usedState="Not Use"/>
+        <Item currentVect="23" id="FCU_FRDYI" priority="15" usedState="Not Use"/>
+        <Item currentVect="27" id="ICU_SWINT" priority="15" usedState="Not Use"/>
+        <Item currentVect="28" id="CMT0_CMI0" priority="15" usedState="Not Use"/>
+        <Item currentVect="29" id="CMT1_CMI1" priority="15" usedState="Not Use"/>
+        <Item currentVect="30" id="CMT2_CMI2" priority="15" usedState="Not Use"/>
+        <Item currentVect="31" id="CMT3_CMI3" priority="15" usedState="Not Use"/>
+        <Item currentVect="32" id="CAC_FERRF" priority="15" usedState="Not Use"/>
+        <Item currentVect="33" id="CAC_MENDF" priority="15" usedState="Not Use"/>
+        <Item currentVect="34" id="CAC_OVFF" priority="15" usedState="Not Use"/>
+        <Item currentVect="40" id="GPT_ETGIN" priority="15" usedState="Not Use"/>
+        <Item currentVect="41" id="GPT_ETGIP" priority="15" usedState="Not Use"/>
+        <Item currentVect="44" id="RSPI0_SPEI0" priority="15" usedState="Not Use"/>
+        <Item currentVect="45" id="RSPI0_SPRI0" priority="15" usedState="Not Use"/>
+        <Item currentVect="46" id="RSPI0_SPTI0" priority="15" usedState="Not Use"/>
+        <Item currentVect="47" id="RSPI0_SPII0" priority="15" usedState="Not Use"/>
+        <Item currentVect="48" id="GPT0_GTCIA0" priority="15" usedState="Not Use"/>
+        <Item currentVect="49" id="GPT0_GTCIB0" priority="15" usedState="Not Use"/>
+        <Item currentVect="50" id="GPT0_GTCIC0" priority="15" usedState="Not Use"/>
+        <Item currentVect="51" id="GPT0_GTCID0" priority="15" usedState="Not Use"/>
+        <Item currentVect="52" id="GPT0_GDTE0" priority="15" usedState="Not Use"/>
+        <Item currentVect="53" id="GPT0_GTCIE0" priority="15" usedState="Not Use"/>
+        <Item currentVect="54" id="GPT0_GTCIF0" priority="15" usedState="Not Use"/>
+        <Item currentVect="55" id="GPT0_GTCIV0" priority="15" usedState="Not Use"/>
+        <Item currentVect="56" id="GPT0_GTCIU0" priority="15" usedState="Not Use"/>
+        <Item currentVect="57" id="DOC_DOPCF" priority="15" usedState="Not Use"/>
+        <Item currentVect="59" id="RSCAN_COMFRXINT" priority="15" usedState="Not Use"/>
+        <Item currentVect="60" id="RSCAN_RXFINT" priority="15" usedState="Not Use"/>
+        <Item currentVect="61" id="RSCAN_TXINT" priority="15" usedState="Not Use"/>
+        <Item currentVect="62" id="RSCAN_CHERRINT" priority="15" usedState="Not Use"/>
+        <Item currentVect="63" id="RSCAN_GLERRINT" priority="15" usedState="Not Use"/>
+        <Item currentVect="64" id="ICU_IRQ0" priority="15" usedState="Not Use"/>
+        <Item currentVect="65" id="ICU_IRQ1" priority="15" usedState="Not Use"/>
+        <Item currentVect="66" id="ICU_IRQ2" priority="15" usedState="Not Use"/>
+        <Item currentVect="67" id="ICU_IRQ3" priority="15" usedState="Not Use"/>
+        <Item currentVect="68" id="ICU_IRQ4" priority="15" usedState="Not Use"/>
+        <Item currentVect="69" id="ICU_IRQ5" priority="15" usedState="Not Use"/>
+        <Item currentVect="70" id="ICU_IRQ6" priority="15" usedState="Not Use"/>
+        <Item currentVect="71" id="ICU_IRQ7" priority="15" usedState="Not Use"/>
+        <Item currentVect="88" id="LVD_LVD1" priority="15" usedState="Not Use"/>
+        <Item currentVect="89" id="LVD_LVD2" priority="15" usedState="Not Use"/>
+        <Item currentVect="98" id="GPT1_GTCIA1" priority="15" usedState="Not Use"/>
+        <Item currentVect="99" id="GPT1_GTCIB1" priority="15" usedState="Not Use"/>
+        <Item currentVect="100" id="GPT1_GTCIC1" priority="15" usedState="Not Use"/>
+        <Item currentVect="101" id="GPT1_GTCID1" priority="15" usedState="Not Use"/>
+        <Item currentVect="102" id="S12AD_S12ADI" priority="15" usedState="Not Use"/>
+        <Item currentVect="103" id="S12AD_GBADI" priority="15" usedState="Not Use"/>
+        <Item currentVect="104" id="S12AD_GCADI" priority="15" usedState="Not Use"/>
+        <Item currentVect="105" id="S12AD1_S12ADI1" priority="15" usedState="Not Use"/>
+        <Item currentVect="106" id="S12AD1_GBADI1" priority="15" usedState="Not Use"/>
+        <Item currentVect="107" id="S12AD1_GCADI1" priority="15" usedState="Not Use"/>
+        <Item currentVect="108" id="CMPC0_CMPC0" priority="15" usedState="Not Use"/>
+        <Item currentVect="109" id="CMPC1_CMPC1" priority="15" usedState="Not Use"/>
+        <Item currentVect="110" id="CMPC2_CMPC2" priority="15" usedState="Not Use"/>
+        <Item currentVect="111" id="S12AD2_S12ADI2" priority="15" usedState="Not Use"/>
+        <Item currentVect="112" id="S12AD2_GBADI2" priority="15" usedState="Not Use"/>
+        <Item currentVect="113" id="S12AD2_GCADI2" priority="15" usedState="Not Use"/>
+        <Item currentVect="114" id="MTU0_TGIA0" priority="15" usedState="Not Use"/>
+        <Item currentVect="115" id="MTU0_TGIB0" priority="15" usedState="Not Use"/>
+        <Item currentVect="116" id="MTU0_TGIC0" priority="15" usedState="Not Use"/>
+        <Item currentVect="117" id="MTU0_TGID0" priority="15" usedState="Not Use"/>
+        <Item currentVect="118" id="MTU0_TCIV0" priority="15" usedState="Not Use"/>
+        <Item currentVect="119" id="MTU0_TGIE0" priority="15" usedState="Not Use"/>
+        <Item currentVect="120" id="MTU0_TGIF0" priority="15" usedState="Not Use"/>
+        <Item currentVect="121" id="MTU1_TGIA1" priority="15" usedState="Not Use"/>
+        <Item currentVect="122" id="MTU1_TGIB1" priority="15" usedState="Not Use"/>
+        <Item currentVect="123" id="MTU1_TCIV1" priority="15" usedState="Not Use"/>
+        <Item currentVect="124" id="MTU1_TCIU1" priority="15" usedState="Not Use"/>
+        <Item currentVect="125" id="MTU2_TGIA2" priority="15" usedState="Not Use"/>
+        <Item currentVect="126" id="MTU2_TGIB2" priority="15" usedState="Not Use"/>
+        <Item currentVect="127" id="MTU2_TCIV2" priority="15" usedState="Not Use"/>
+        <Item currentVect="128" id="MTU2_TCIU2" priority="15" usedState="Not Use"/>
+        <Item currentVect="129" id="MTU3_TGIA3" priority="15" usedState="Not Use"/>
+        <Item currentVect="130" id="MTU3_TGIB3" priority="15" usedState="Not Use"/>
+        <Item currentVect="131" id="MTU3_TGIC3" priority="15" usedState="Not Use"/>
+        <Item currentVect="132" id="MTU3_TGID3" priority="15" usedState="Not Use"/>
+        <Item currentVect="133" id="MTU3_TCIV3" priority="15" usedState="Not Use"/>
+        <Item currentVect="134" id="MTU4_TGIA4" priority="15" usedState="Not Use"/>
+        <Item currentVect="135" id="MTU4_TGIB4" priority="15" usedState="Not Use"/>
+        <Item currentVect="136" id="MTU4_TGIC4" priority="15" usedState="Not Use"/>
+        <Item currentVect="137" id="MTU4_TGID4" priority="15" usedState="Not Use"/>
+        <Item currentVect="138" id="MTU4_TCIV4" priority="15" usedState="Not Use"/>
+        <Item currentVect="139" id="MTU5_TGIU5" priority="15" usedState="Not Use"/>
+        <Item currentVect="140" id="MTU5_TGIV5" priority="15" usedState="Not Use"/>
+        <Item currentVect="141" id="MTU5_TGIW5" priority="15" usedState="Not Use"/>
+        <Item currentVect="142" id="MTU6_TGIA6" priority="15" usedState="Not Use"/>
+        <Item currentVect="143" id="MTU6_TGIB6" priority="15" usedState="Not Use"/>
+        <Item currentVect="144" id="MTU6_TGIC6" priority="15" usedState="Not Use"/>
+        <Item currentVect="145" id="MTU6_TGID6" priority="15" usedState="Not Use"/>
+        <Item currentVect="146" id="MTU6_TCIV6" priority="15" usedState="Not Use"/>
+        <Item currentVect="149" id="MTU7_TGIA7" priority="15" usedState="Not Use"/>
+        <Item currentVect="150" id="MTU7_TGIB7" priority="15" usedState="Not Use"/>
+        <Item currentVect="151" id="MTU7_TGIC7" priority="15" usedState="Not Use"/>
+        <Item currentVect="152" id="MTU7_TGID7" priority="15" usedState="Not Use"/>
+        <Item currentVect="153" id="MTU7_TCIV7" priority="15" usedState="Not Use"/>
+        <Item currentVect="159" id="MTU9_TGIA9" priority="15" usedState="Not Use"/>
+        <Item currentVect="160" id="MTU9_TGIB9" priority="15" usedState="Not Use"/>
+        <Item currentVect="161" id="MTU9_TGIC9" priority="15" usedState="Not Use"/>
+        <Item currentVect="162" id="MTU9_TGID9" priority="15" usedState="Not Use"/>
+        <Item currentVect="163" id="MTU9_TCIV9" priority="15" usedState="Not Use"/>
+        <Item currentVect="164" id="MTU9_TGIE9" priority="15" usedState="Not Use"/>
+        <Item currentVect="165" id="MTU9_TGIF9" priority="15" usedState="Not Use"/>
+        <Item currentVect="168" id="POE_OEI1" priority="15" usedState="Not Use"/>
+        <Item currentVect="169" id="POE_OEI2" priority="15" usedState="Not Use"/>
+        <Item currentVect="170" id="POE_OEI3" priority="15" usedState="Not Use"/>
+        <Item currentVect="171" id="POE_OEI4" priority="15" usedState="Not Use"/>
+        <Item currentVect="172" id="POE_OEI5" priority="15" usedState="Not Use"/>
+        <Item currentVect="173" id="CMPC3_CMPC3" priority="15" usedState="Not Use"/>
+        <Item currentVect="174" id="TMR0_CMIA0" priority="15" usedState="Not Use"/>
+        <Item currentVect="175" id="TMR0_CMIB0" priority="15" usedState="Not Use"/>
+        <Item currentVect="176" id="TMR0_OVI0" priority="15" usedState="Not Use"/>
+        <Item currentVect="177" id="TMR1_CMIA1" priority="15" usedState="Not Use"/>
+        <Item currentVect="178" id="TMR1_CMIB1" priority="15" usedState="Not Use"/>
+        <Item currentVect="179" id="TMR1_OVI1" priority="15" usedState="Not Use"/>
+        <Item currentVect="180" id="TMR2_CMIA2" priority="15" usedState="Not Use"/>
+        <Item currentVect="181" id="TMR2_CMIB2" priority="15" usedState="Not Use"/>
+        <Item currentVect="182" id="TMR2_OVI2" priority="15" usedState="Not Use"/>
+        <Item currentVect="183" id="TMR3_CMIA3" priority="15" usedState="Not Use"/>
+        <Item currentVect="184" id="TMR3_CMIB3" priority="15" usedState="Not Use"/>
+        <Item currentVect="185" id="TMR3_OVI3" priority="15" usedState="Not Use"/>
+        <Item currentVect="186" id="TMR4_CMIA4" priority="15" usedState="Not Use"/>
+        <Item currentVect="187" id="TMR4_CMIB4" priority="15" usedState="Not Use"/>
+        <Item currentVect="188" id="TMR4_OVI4" priority="15" usedState="Not Use"/>
+        <Item currentVect="189" id="TMR5_CMIA5" priority="15" usedState="Not Use"/>
+        <Item currentVect="190" id="TMR5_CMIB5" priority="15" usedState="Not Use"/>
+        <Item currentVect="191" id="TMR5_OVI5" priority="15" usedState="Not Use"/>
+        <Item currentVect="192" id="TMR6_CMIA6" priority="15" usedState="Not Use"/>
+        <Item currentVect="193" id="TMR6_CMIB6" priority="15" usedState="Not Use"/>
+        <Item currentVect="194" id="TMR6_OVI6" priority="15" usedState="Not Use"/>
+        <Item currentVect="195" id="TMR7_CMIA7" priority="15" usedState="Not Use"/>
+        <Item currentVect="196" id="TMR7_CMIB7" priority="15" usedState="Not Use"/>
+        <Item currentVect="197" id="TMR7_OVI7" priority="15" usedState="Not Use"/>
+        <Item currentVect="202" id="GPT1_GDTE1" priority="15" usedState="Not Use"/>
+        <Item currentVect="203" id="GPT1_GTCIE1" priority="15" usedState="Not Use"/>
+        <Item currentVect="204" id="GPT1_GTCIF1" priority="15" usedState="Not Use"/>
+        <Item currentVect="205" id="GPT1_GTCIV1" priority="15" usedState="Not Use"/>
+        <Item currentVect="206" id="GPT1_GTCIU1" priority="15" usedState="Not Use"/>
+        <Item currentVect="207" id="GPT2_GTCIA2" priority="15" usedState="Not Use"/>
+        <Item currentVect="208" id="GPT2_GTCIB2" priority="15" usedState="Not Use"/>
+        <Item currentVect="209" id="GPT2_GTCIC2" priority="15" usedState="Not Use"/>
+        <Item currentVect="210" id="GPT2_GTCID2" priority="15" usedState="Not Use"/>
+        <Item currentVect="211" id="GPT2_GDTE2" priority="15" usedState="Not Use"/>
+        <Item currentVect="212" id="GPT2_GTCIE2" priority="15" usedState="Not Use"/>
+        <Item currentVect="213" id="GPT2_GTCIF2" priority="15" usedState="Not Use"/>
+        <Item currentVect="214" id="GPT2_GTCIV2" priority="15" usedState="Not Use"/>
+        <Item currentVect="215" id="GPT2_GTCIU2" priority="15" usedState="Not Use"/>
+        <Item currentVect="216" id="GPT3_GTCIA3" priority="15" usedState="Not Use"/>
+        <Item currentVect="217" id="GPT3_GTCIB3" priority="15" usedState="Not Use"/>
+        <Item currentVect="218" id="SCI1_ERI1" priority="15" usedState="Not Use"/>
+        <Item currentVect="219" id="SCI1_RXI1" priority="15" usedState="Not Use"/>
+        <Item currentVect="220" id="SCI1_TXI1" priority="15" usedState="Not Use"/>
+        <Item currentVect="221" id="SCI1_TEI1" priority="15" usedState="Not Use"/>
+        <Item currentVect="222" id="SCI5_ERI5" priority="15" usedState="Not Use"/>
+        <Item currentVect="223" id="SCI5_RXI5" priority="15" usedState="Not Use"/>
+        <Item currentVect="224" id="SCI5_TXI5" priority="15" usedState="Not Use"/>
+        <Item currentVect="225" id="SCI5_TEI5" priority="15" usedState="Not Use"/>
+        <Item currentVect="226" id="SCI6_ERI6" priority="15" usedState="Not Use"/>
+        <Item currentVect="227" id="SCI6_RXI6" priority="15" usedState="Not Use"/>
+        <Item currentVect="228" id="SCI6_TXI6" priority="15" usedState="Not Use"/>
+        <Item currentVect="229" id="SCI6_TEI6" priority="15" usedState="Not Use"/>
+        <Item currentVect="238" id="GPT3_GTCIC3" priority="15" usedState="Not Use"/>
+        <Item currentVect="239" id="GPT3_GTCID3" priority="15" usedState="Not Use"/>
+        <Item currentVect="240" id="GPT3_GDTE3" priority="15" usedState="Not Use"/>
+        <Item currentVect="241" id="GPT3_GTCIE3" priority="15" usedState="Not Use"/>
+        <Item currentVect="242" id="GPT3_GTCIF3" priority="15" usedState="Not Use"/>
+        <Item currentVect="243" id="GPT3_GTCIV3" priority="15" usedState="Not Use"/>
+        <Item currentVect="244" id="GPT3_GTCIU3" priority="15" usedState="Not Use"/>
+        <Item currentVect="246" id="RIIC0_EEI0" priority="15" usedState="Not Use"/>
+        <Item currentVect="247" id="RIIC0_RXI0" priority="15" usedState="Not Use"/>
+        <Item currentVect="248" id="RIIC0_TXI0" priority="15" usedState="Not Use"/>
+        <Item currentVect="249" id="RIIC0_TEI0" priority="15" usedState="Not Use"/>
+    </tool>
+    <tool id="Pins" version="1.0.1.0">
+        <pinItem allocation="6" comments="" direction="None" id="FINED" isUsedBySoftware="true" locked="false" operationMode="" status="65280"/>
+        <pinnumItem comment="AN003" id="88" symbolicname=""/>
+        <pinnumItem comment="MTIOC6B" id="45" symbolicname=""/>
+        <pinnumItem comment="AN002" id="89" symbolicname=""/>
+        <pinnumItem comment="MTIOC7A" id="46" symbolicname=""/>
+        <pinnumItem comment="MTIOC7B" id="47" symbolicname=""/>
+        <pinnumItem comment="MTIOC6D" id="48" symbolicname=""/>
+        <pinnumItem comment="MTIOC7C" id="49" symbolicname=""/>
+        <pinnumItem comment="AN001" id="90" symbolicname=""/>
+        <pinnumItem comment="AN000" id="91" symbolicname=""/>
+        <pinnumItem comment="AVCC1" id="92" symbolicname=""/>
+        <pinnumItem comment="AVCC0" id="93" symbolicname=""/>
+        <pinnumItem comment="MTIOC7D" id="50" symbolicname=""/>
+        <pinnumItem comment="AVSS0" id="94" symbolicname=""/>
+        <pinnumItem comment="MTIOC4D" id="51" symbolicname=""/>
+        <pinnumItem comment="AVSS1" id="95" symbolicname=""/>
+        <pinnumItem comment="MTIOC4C" id="52" symbolicname=""/>
+        <pinnumItem comment="A-SCK6" id="96" symbolicname=""/>
+        <pinnumItem comment="MTIOC3D" id="53" symbolicname=""/>
+        <pinnumItem comment="A-TXD6" id="97" symbolicname=""/>
+        <pinnumItem comment="RESn" id="10" symbolicname=""/>
+        <pinnumItem comment="MTIOC4B" id="54" symbolicname=""/>
+        <pinnumItem comment="A-RXD6" id="98" symbolicname=""/>
+        <pinnumItem comment="XTAL" id="11" symbolicname=""/>
+        <pinnumItem comment="MTIOC4A" id="55" symbolicname=""/>
+        <pinnumItem comment="MTIOC3A" id="99" symbolicname=""/>
+        <pinnumItem comment="MTIOC3B" id="56" symbolicname=""/>
+        <pinnumItem comment="EXTAL" id="13" symbolicname=""/>
+        <pinnumItem comment="POE0n" id="57" symbolicname=""/>
+        <pinnumItem comment="MTCLKA" id="58" symbolicname=""/>
+        <pinnumItem comment="NMIn" id="15" symbolicname=""/>
+        <pinnumItem comment="MTIOC3C" id="59" symbolicname=""/>
+        <pinnumItem comment="IO4" id="16" symbolicname=""/>
+        <pinnumItem comment="RL78G1CRTS" id="17" symbolicname=""/>
+        <pinnumItem comment="MTIOC9A" id="18" symbolicname=""/>
+        <pinnumItem comment="CTS1RTS1" id="19" symbolicname=""/>
+        <pinnumItem comment="LED1" id="1" symbolicname="LED1"/>
+        <pinnumItem comment="SW2" id="2" symbolicname=""/>
+        <pinnumItem comment="IO5" id="4" symbolicname=""/>
+        <pinnumItem comment="MD_FINED" id="6" symbolicname=""/>
+        <pinnumItem comment="IO6" id="7" symbolicname=""/>
+        <pinnumItem comment="MTCLKC" id="8" symbolicname=""/>
+        <pinnumItem comment="MTCLKD" id="9" symbolicname=""/>
+        <pinnumItem comment="JA2-MTIOC0A_IRQ6" id="61" symbolicname=""/>
+        <pinnumItem comment="JA2-MTIOC0B_IRQ7" id="63" symbolicname=""/>
+        <pinnumItem comment="RXD1" id="20" symbolicname=""/>
+        <pinnumItem comment="JA6-MTIC5U" id="64" symbolicname=""/>
+        <pinnumItem comment="SCK1" id="21" symbolicname=""/>
+        <pinnumItem comment="JA6-MTIC5V" id="65" symbolicname=""/>
+        <pinnumItem comment="TXD1" id="22" symbolicname=""/>
+        <pinnumItem comment="JA6-MTIC5W" id="66" symbolicname=""/>
+        <pinnumItem comment="IO7" id="23" symbolicname=""/>
+        <pinnumItem comment="CVREFC1" id="67" symbolicname=""/>
+        <pinnumItem comment="PD1" id="24" symbolicname=""/>
+        <pinnumItem comment="MTCLKB" id="68" symbolicname=""/>
+        <pinnumItem comment="PD0" id="25" symbolicname=""/>
+        <pinnumItem comment="IO0" id="69" symbolicname=""/>
+        <pinnumItem comment="P-SCK5" id="26" symbolicname=""/>
+        <pinnumItem comment="P-RXD5" id="27" symbolicname=""/>
+        <pinnumItem comment="P-TXD5" id="28" symbolicname=""/>
+        <pinnumItem comment="IO1" id="70" symbolicname=""/>
+        <pinnumItem comment="AVCC2" id="71" symbolicname=""/>
+        <pinnumItem comment="VREF" id="72" symbolicname=""/>
+        <pinnumItem comment="AVSS2" id="73" symbolicname=""/>
+        <pinnumItem comment="CTS5RTS5" id="30" symbolicname=""/>
+        <pinnumItem comment="P63" id="74" symbolicname=""/>
+        <pinnumItem comment="P62" id="75" symbolicname=""/>
+        <pinnumItem comment="LED0" id="32" symbolicname="LED0"/>
+        <pinnumItem comment="RL78G1CCTS" id="76" symbolicname=""/>
+        <pinnumItem comment="SDA0" id="33" symbolicname=""/>
+        <pinnumItem comment="IRQ4" id="77" symbolicname=""/>
+        <pinnumItem comment="SCL0" id="34" symbolicname=""/>
+        <pinnumItem comment="IRQ3" id="78" symbolicname=""/>
+        <pinnumItem comment="MTIOC0D" id="35" symbolicname=""/>
+        <pinnumItem comment="IRQ2" id="79" symbolicname=""/>
+        <pinnumItem comment="ADTRG1n_IRQ1" id="36" symbolicname=""/>
+        <pinnumItem comment="SW3" id="37" symbolicname=""/>
+        <pinnumItem comment="MTIOC2A" id="38" symbolicname=""/>
+        <pinnumItem comment="MTIOC2B" id="39" symbolicname=""/>
+        <pinnumItem comment="SW1" id="100" symbolicname=""/>
+        <pinnumItem comment="LED2" id="80" symbolicname="LED2"/>
+        <pinnumItem comment="LED3" id="81" symbolicname="LED3"/>
+        <pinnumItem comment="IO2" id="82" symbolicname=""/>
+        <pinnumItem comment="IO3" id="83" symbolicname=""/>
+        <pinnumItem comment="MTIOC6A" id="40" symbolicname=""/>
+        <pinnumItem comment="AN103" id="84" symbolicname=""/>
+        <pinnumItem comment="MTIOC6C" id="41" symbolicname=""/>
+        <pinnumItem comment="AN102" id="85" symbolicname=""/>
+        <pinnumItem comment="AN101" id="86" symbolicname=""/>
+        <pinnumItem comment="POE4n" id="43" symbolicname=""/>
+        <pinnumItem comment="AN100" id="87" symbolicname=""/>
+    </tool>
+    <tool id="Summary" version="1.0.0.0">
+        <option id="com.renesas.smc.code.path" value="src/smc_gen"/>
+        <option id="com.renesas.smc.code.type" value="Normal Folder"/>
+    </tool>
+    <tool id="SWComponent" version="1.0.0.0">
+        <configuration inuse="true" name="r_bsp">
+            <component description="Dependencies : None&#10;The r_bsp package provides a foundation for code to be built on top of. It provides startup code, iodefines, and MCU information for different boards. There are 2 folders that make up the r_bsp package. The 'mcu' folder contains files that are common to a MCU group. These files provide functionality such as easy register access, CPU functions, and a file named 'mcu_info.h' for each MCU group. The 'mcu_info.h' file has information about the MCU on the board and is configured based on the information given in r_bsp_config.h. The information in 'mcu_info.h' is used to help configure Renesas middleware that uses the r_bsp package. The 'board' folder has a folder with startup code for each supported board.  Which MCU and board is chosen is decided by the settings in 'platform.h'. The user can choose which board they are using by uncommenting the include path that applies to their board. For example, if you are using the RSK+RX64M then you would uncomment the #include &quot;./board/generic_rx64m/r_bsp.h&quot; include path. Users are encouraged to add their own boards to the 'board' directory. BSPs are configured by using the r_bsp_config.h file. Each board will have a reference configuration file named r_bsp_config_reference.h. The user should copy this file to their project, rename it to r_bsp_config.h, and use the options inside the file to configure the BSP for their project." detailDescription="Board Support Packages." display="r_bsp" id="r_bsp7.71" version="7.71">
+                <gridItem id="BSP_CFG_USER_STACK_ENABLE" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_USTACK_BYTES" selectedIndex="0x400"/>
+                <gridItem id="BSP_CFG_ISTACK_BYTES" selectedIndex="0x1400"/>
+                <gridItem id="BSP_CFG_HEAP_BYTES" selectedIndex="0x0"/>
+                <gridItem id="BSP_CFG_IO_LIB_ENABLE" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_USER_CHARGET_ENABLED" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_USER_CHARGET_FUNCTION" selectedIndex="my_sw_charget_function"/>
+                <gridItem id="BSP_CFG_USER_CHARPUT_ENABLED" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_USER_CHARPUT_FUNCTION" selectedIndex="my_sw_charput_function"/>
+                <gridItem id="BSP_CFG_RUN_IN_USER_MODE" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_ID_CODE_LONG_1" selectedIndex="0x45010203"/>
+                <gridItem id="BSP_CFG_ID_CODE_LONG_2" selectedIndex="0x04050607"/>
+                <gridItem id="BSP_CFG_ID_CODE_LONG_3" selectedIndex="0x08090A0B"/>
+                <gridItem id="BSP_CFG_ID_CODE_LONG_4" selectedIndex="0x0C0D0E0F"/>
+                <gridItem id="BSP_CFG_ROM_CACHE_ENABLE" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_ROM_CODE_PROTECT_VALUE" selectedIndex="0xFFFFFFFF"/>
+                <gridItem id="BSP_CFG_USER_LOCKING_ENABLED" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_USER_LOCKING_TYPE" selectedIndex="bsp_lock_t"/>
+                <gridItem id="BSP_CFG_USER_LOCKING_HW_LOCK_FUNCTION" selectedIndex="my_hw_locking_function"/>
+                <gridItem id="BSP_CFG_USER_LOCKING_HW_UNLOCK_FUNCTION" selectedIndex="my_hw_unlocking_function"/>
+                <gridItem id="BSP_CFG_USER_LOCKING_SW_LOCK_FUNCTION" selectedIndex="my_sw_locking_function"/>
+                <gridItem id="BSP_CFG_USER_LOCKING_SW_UNLOCK_FUNCTION" selectedIndex="my_sw_unlocking_function"/>
+                <gridItem id="BSP_CFG_USER_WARM_START_CALLBACK_PRE_INITC_ENABLED" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_USER_WARM_START_PRE_C_FUNCTION" selectedIndex="my_sw_warmstart_prec_function"/>
+                <gridItem id="BSP_CFG_USER_WARM_START_CALLBACK_POST_INITC_ENABLED" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_USER_WARM_START_POST_C_FUNCTION" selectedIndex="my_sw_warmstart_postc_function"/>
+                <gridItem id="BSP_CFG_PARAM_CHECKING_ENABLE" selectedIndex="1"/>
+                <gridItem id="BSP_CFG_FIT_IPL_MAX" selectedIndex="15"/>
+                <gridItem id="BSP_CFG_SWINT_UNIT1_ENABLE" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_SWINT_TASK_BUFFER_NUMBER" selectedIndex="8"/>
+                <gridItem id="BSP_CFG_SWINT_IPR_INITIAL_VALUE" selectedIndex="1"/>
+                <gridItem id="BSP_CFG_SCI_UART_TERMINAL_ENABLE" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_SCI_UART_TERMINAL_CHANNEL" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_SCI_UART_TERMINAL_BITRATE" selectedIndex="115200"/>
+                <gridItem id="BSP_CFG_SCI_UART_TERMINAL_INTERRUPT_PRIORITY" selectedIndex="15"/>
+                <gridItem id="BSP_CFG_BUS_PRIORITY_INITIALIZE_ENABLE" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_MEMORY_BUS1_PRIORITY" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_MEMORY_BUS2_PRIORITY" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_INTERNAL_PERIPHERAL_BUS1_PRIORITY" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_INTERNAL_PERIPHERAL_BUS2_3_PRIORITY" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_INTERNAL_PERIPHERAL_BUS4_PRIORITY" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_INTERNAL_PERIPHERAL_BUS6_PRIORITY" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_BOOTLOADER_PROJECT" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_LOW_LEVEL_INTERFACE_STDIO_ENABLE" selectedIndex="1"/>
+                <gridItem id="BSP_CFG_LOW_LEVEL_INTERFACE_SBRK_ENABLE" selectedIndex="1"/>
+                <gridItem id="BSP_CFG_LOW_LEVEL_INTERFACE_REENTRANT_LIB_ENABLE" selectedIndex="1"/>
+                <gridItem id="BSP_CFG_USER_EXCLUSIVE_CONTROL_ENABLE" selectedIndex="0"/>
+                <gridItem id="BSP_CFG_USER_ENTER_CRITICAL_FUNCTION" selectedIndex="my_enter_critical_function"/>
+                <gridItem id="BSP_CFG_USER_EXIT_CRITICAL_FUNCTION" selectedIndex="my_exit_critical_function"/>
+            </component>
+            <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
+            <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
+        </configuration>
+    </tool>
+    <tool id="System">
+        <section id="ocd">
+            <option enabled="true" id="debugIF" selection="fine">
+                <item enabled="true" id="unused"/>
+                <item enabled="true" id="fine"/>
+            </option>
+        </section>
+    </tool>
+</smc>
