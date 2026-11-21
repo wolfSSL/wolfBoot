@@ -2,8 +2,9 @@
 #
 # Key format
 # key <clientId> <keyId> <access> <flags> <label> <file>
-# WH_NVM_FLAGS_USAGE_VERIFY is 0x100.
+# 0x901 is WH_NVM_FLAGS_USAGE_VERIFY (0x100), WH_NVM_FLAGS_NONDESTROYABLE
+# (0x800) and WH_NVM_FLAGS_NONMODIFIABLE (0x1).
 #
 # clientId matches WOLFHSM_CLIENT_ID.
 # keyId matches hsmKeyIdPubKey and TCHSM_CFG_CROSS_VERIFY_KEY_ID.
-key 0x1 0xFF 0xFF 0x100 "wolfBoot Pubkey" wolfboot_signing_private_key_pub.der
+key 0x1 0xFF 0xFF 0x901 "wolfBoot Pubkey" wolfboot_signing_private_key_pub.der
