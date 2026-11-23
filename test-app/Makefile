@@ -1672,6 +1672,7 @@ ifneq (,$(filter aurix_tc4xx aurix_tc4xx_csrm,$(TARGET)))
   # Limit __WOLFBOOT to objects that define RAMFUNCTION helpers.
   hal_$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
   ../test-app/libwolfboot.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+  $(TCHSM_WB_WOLFLLD)/src/tc4_flash.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
   ifeq ($(TARGET),aurix_tc4xx_csrm)
     APP_OBJS += $(TCHSM_WB_CSRM_LLD_OBJS)
     # CSRM app linker script ships with the port.

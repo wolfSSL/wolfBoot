@@ -110,7 +110,7 @@ static void RAMFUNCTION cacheSector(uint32_t sectorAddress)
         }
         else {
             tc4_flash_Read(sectorAddress + page, (uint8_t*)dst,
-                      TC4_PFLASH_PAGE_SIZE);
+                           TC4_PFLASH_PAGE_SIZE);
         }
     }
 }
@@ -122,8 +122,8 @@ static void RAMFUNCTION programCachedSector(uint32_t sectorAddress)
     uint32_t off;
     for (off = 0; off < WOLFBOOT_SECTOR_SIZE; off += TC4_PROG_CHUNK_SIZE) {
         if (tc4_flash_Program(sectorAddress + off,
-                                sectorBuffer + (off / sizeof(uint32_t)),
-                                TC4_PROG_CHUNK_SIZE) != 0) {
+                              sectorBuffer + (off / sizeof(uint32_t)),
+                              TC4_PROG_CHUNK_SIZE) != 0) {
             wolfBoot_panic();
         }
     }
@@ -151,7 +151,7 @@ static int RAMFUNCTION programBytesToErasedFlash(uint32_t       address,
         memcpy((uint8_t*)pageBuffer + offset, data, toWrite);
 
         if (tc4_flash_Program(pageAddress, pageBuffer,
-                                TC4_PFLASH_PAGE_SIZE) != 0) {
+                              TC4_PFLASH_PAGE_SIZE) != 0) {
             return -1;
         }
 
