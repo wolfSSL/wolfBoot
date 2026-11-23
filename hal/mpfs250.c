@@ -550,6 +550,7 @@ void hal_init(void)
 
 #ifdef MPFS_DDR_INIT
     mpfs_ddr_bringup();
+    mpfs_crypto_mpu_init();
 #endif
 #endif
 
@@ -2386,10 +2387,25 @@ void mpfs_iomux_init(void)
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
 
-/* Each AXI master has 16 PMPCFG entries at 0x20005000 + (index << 8); MMC is
- * index 7.  Without them a master stalls silently mid-transaction. */
+/* Each AXI master has 16 PMPCFG entries at 0x20005000 + (index << 8); crypto
+ * is index 3, MMC index 7.  Without them a master stalls silently
+ * mid-transaction. */
 #define MSS_MPU_BASE                0x20005000UL
+#define MSS_MPU_CRYPTO_BASE         (MSS_MPU_BASE + (3UL << 8))
 #define MSS_MPU_MMC_BASE            (MSS_MPU_BASE + (7UL << 8))
+
+/* The User Crypto engine's DMA master, set as HSS does.  From reset it reaches
+ * no DDR, and the engine drops its writes while reporting success. */
+void mpfs_crypto_mpu_init(void)
+{
+    volatile uint64_t *pmp = (volatile uint64_t *)MSS_MPU_CRYPTO_BASE;
+
+    pmp[0] = LIBERO_SETTING_CRYPTO_MPU_CFG_PMP0;
+    pmp[1] = LIBERO_SETTING_CRYPTO_MPU_CFG_PMP1;
+    pmp[2] = LIBERO_SETTING_CRYPTO_MPU_CFG_PMP2;
+    pmp[3] = LIBERO_SETTING_CRYPTO_MPU_CFG_PMP3;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+}
 
 /* Leave the MMC usable by whoever runs next, which a build that boots from
  * QSPI would otherwise never do: the block stays clock-gated and in soft
