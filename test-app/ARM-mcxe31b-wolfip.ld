@@ -47,9 +47,9 @@ SECTIONS
         *wolfip.o(.text.fifo_pop .text.fifo_can_push_len)
         *wolfip.o(.text.tcp_snd_nxt .text.tcp_calc_win .text.wolfIP_sock_send)
         *wolfip.o(.text.wolfIP_route_lookup_internal .text.arp_neighbor_index)
-        *nxp_mcxe31b_emac.o(.text.eth_poll .text.eth_send)
-        *nxp_mcxe31b_emac.o(.text.eth_poll_stats .text.eth_send_stats)
-        *nxp_mcxe31b_emac.o(.text.nxp_mcxe31b_emac_irq_handler)
+        *nxp_mcxe_emac.o(.text.eth_poll .text.eth_send)
+        *nxp_mcxe_emac.o(.text.eth_poll_stats .text.eth_send_stats)
+        *nxp_mcxe_emac.o(.text.nxp_mcxe_emac_irq_handler)
         . = ALIGN(8);
         _end_ramcode_itcm = .;
     } > ITCM

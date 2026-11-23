@@ -83,9 +83,9 @@ extern void nxp_mcxe_enet_irq_handler(void);
 #ifdef TARGET_mcxe31b
 extern void isr_debug_uart(void);
 /* MCXE31B EMAC common interrupt (IRQ 105) */
-#if defined(NXP_MCXE31B_EMAC_IRQ) && (NXP_MCXE31B_EMAC_IRQ == 1)
-extern void nxp_mcxe31b_emac_irq_handler(void);
-#define isr_emac nxp_mcxe31b_emac_irq_handler
+#if defined(NXP_MCXE_EMAC_IRQ) && (NXP_MCXE_EMAC_IRQ == 1)
+extern void nxp_mcxe_emac_irq_handler(void);
+#define isr_emac nxp_mcxe_emac_irq_handler
 #else
 #define isr_emac isr_empty
 #endif

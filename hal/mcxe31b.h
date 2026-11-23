@@ -19,7 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  *
  * Register definitions for NXP MCXE31B (Cortex-M7, 4MB C40ASF flash).
- * Register offsets and fields from the MCXE31x Reference Manual Rev. 3.
+ * Register offsets and fields from the MCX E3 Reference Manual
+ * (MCXEP172M160FB0RM, Rev. 5).
  */
 
 #ifndef MCXE31B_H
@@ -30,7 +31,8 @@
 /* ============== Clock ============== */
 
 /* The boot ROM (Secure BAF) leaves the core on FIRC 48 MHz. hal_init()
- * switches to the PLL with the RM "Option A" (high performance) dividers:
+ * switches to the PLL with the RM "Option A" (high performance) dividers
+ * (MCXEP172M160FB0RM Rev. 5, 23.7.2.1, Table 134):
  * CORE_CLK 160 MHz, AIPS_PLAT_CLK 80 MHz, AIPS_SLOW_CLK 40 MHz (LPUART1..7
  * functional clock), HSE_CLK 80 MHz. */
 #define FIRC_FREQ               48000000UL

@@ -36,7 +36,7 @@ void wolfip_tftp_test_report(void);
 
 /* Cortex-M ports without a free-running timer of their own take the time
  * and the stop request from the target app */
-#if defined(WOLFIP_PORT_MCXE_ENET) || defined(WOLFIP_PORT_MCXE31B_EMAC)
+#if defined(WOLFIP_PORT_MCXE_ENET) || defined(WOLFIP_PORT_MCXE_EMAC)
 #define WOLFIP_TEST_APP_TIMEBASE
 #endif
 

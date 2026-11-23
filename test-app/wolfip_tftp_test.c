@@ -42,7 +42,7 @@
 /* Port selection:
  *   WOLFIP_PORT_ENETC -> LS1028A ENETC
  *   WOLFIP_PORT_MCXE_ENET -> MCXE247 ENET
- *   WOLFIP_PORT_MCXE31B_EMAC -> MCXE31B EMAC
+ *   WOLFIP_PORT_MCXE_EMAC -> MCX E EMAC (MCXE31B)
  *   else QorIQ FMan
  * Driver entry points are wrapped so the bring-up code below is port-agnostic. */
 #if defined(WOLFIP_PORT_ENETC)
@@ -65,17 +65,17 @@
 #define WOLFIP_NETDEV_STATS_GET nxp_mcxe_enet_stats_get
 #define WOLFIP_NETDEV_STATS_RESET nxp_mcxe_enet_stats_reset
 #endif
-#elif defined(WOLFIP_PORT_MCXE31B_EMAC)
-#include "nxp_mcxe31b_emac.h"
-#define WOLFIP_NETDEV_INIT      nxp_mcxe31b_emac_init
-#define WOLFIP_NETDEV_PHY_ADDR  nxp_mcxe31b_emac_phy_addr
-#define WOLFIP_NETDEV_PHY_READ  nxp_mcxe31b_emac_phy_read
-#define WOLFIP_NETDEV_LINK_UP   nxp_mcxe31b_emac_link_up
+#elif defined(WOLFIP_PORT_MCXE_EMAC)
+#include "nxp_mcxe_emac.h"
+#define WOLFIP_NETDEV_INIT      nxp_mcxe_emac_init
+#define WOLFIP_NETDEV_PHY_ADDR  nxp_mcxe_emac_phy_addr
+#define WOLFIP_NETDEV_PHY_READ  nxp_mcxe_emac_phy_read
+#define WOLFIP_NETDEV_LINK_UP   nxp_mcxe_emac_link_up
 #define WOLFIP_NETDEV_NAME      "MCXE31B EMAC"
-#if NXP_MCXE31B_EMAC_STATS
-#define WOLFIP_NETDEV_STATS     struct nxp_mcxe31b_emac_stats
-#define WOLFIP_NETDEV_STATS_GET nxp_mcxe31b_emac_stats_get
-#define WOLFIP_NETDEV_STATS_RESET nxp_mcxe31b_emac_stats_reset
+#if NXP_MCXE_EMAC_STATS
+#define WOLFIP_NETDEV_STATS     struct nxp_mcxe_emac_stats
+#define WOLFIP_NETDEV_STATS_GET nxp_mcxe_emac_stats_get
+#define WOLFIP_NETDEV_STATS_RESET nxp_mcxe_emac_stats_reset
 #endif
 #else
 #include "nxp_fman.h"

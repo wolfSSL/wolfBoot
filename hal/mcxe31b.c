@@ -104,9 +104,9 @@ static void delay_cycles(uint32_t n)
 }
 
 /* Switch the system clocks from FIRC 48 MHz to the PLL using the RM
- * "Option A" (high performance) configuration: FXOSC 16 MHz -> PLL VCO
- * 960 MHz -> ODIV2 480 MHz -> PHI0 160 MHz. On failure the system stays
- * on FIRC. */
+ * "Option A" (high performance) configuration (MCXEP172M160FB0RM Rev. 5,
+ * Table 134): FXOSC 16 MHz -> PLL VCO 960 MHz -> ODIV2 480 MHz -> PHI0
+ * 160 MHz. On failure the system stays on FIRC. */
 static int clock_init(void)
 {
     /* MUX_0 dividers (DIV + 1): CORE 160, AIPS_PLAT 80, AIPS_SLOW 40,

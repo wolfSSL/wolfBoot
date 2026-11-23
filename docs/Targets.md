@@ -7567,10 +7567,10 @@ for later versions, and has the same console as the
 The test application can run a wolfIP throughput test or a DHCP and TFTP test
 over the board's Ethernet port (RMII to a LAN8741A PHY, 50 MHz reference clock
 from the board oscillator). This is optional and needs a wolfIP checkout, whose
-`nxp_mcxe31b_emac` port is a standalone driver for the EMAC (Synopsys Ethernet
+`nxp_mcxe_emac` port is a standalone driver for the EMAC (Synopsys Ethernet
 QoS), its clocks and pins, and the PHY (no vendor SDK). The test app builds it
-interrupt driven (`NXP_MCXE31B_EMAC_IRQ=1`, EMAC IRQ 105 routed in
-`test-app/startup_arm.c`); `NXP_MCXE31B_EMAC_IRQ=0` makes it poll the EMAC
+interrupt driven (`NXP_MCXE_EMAC_IRQ=1`, EMAC IRQ 105 routed in
+`test-app/startup_arm.c`); `NXP_MCXE_EMAC_IRQ=0` makes it poll the EMAC
 instead. `test-app/ARM-mcxe31b-wolfip.ld` keeps the driver's descriptor rings
 and frame buffers in the DTCM, which the core does not cache and the EMAC DMA
 reaches through its backdoor port, and places the wolfIP stack state, with
@@ -7587,7 +7587,7 @@ Set `ENABLE_WOLFIP=1` in `mcxe31b.config` and check the wolfIP path:
 ```sh
 ENABLE_WOLFIP?=1
 WOLFBOOT_LIB_WOLFIP?=../lib/wolfip
-NXP_MCXE31B_EMAC_IRQ?=1
+NXP_MCXE_EMAC_IRQ?=1
 WOLFIP_SPEED_TEST?=1
 WOLFBOOT_TEST_TFTP?=0
 ```
@@ -7597,11 +7597,12 @@ Type `network` on the console to run the test. It works the same way as the
 DHCP lease and runs a TCP and UDP throughput server on port 9, driven from a
 PC on the same network with `python3 tools/scripts/wolfip_speed.py <ip>`.
 Ctrl-C on the console stops the server. Measured on the FRDM-MCXE31B at
-160 MHz, 100 Mbit/s full duplex, interrupt driven, 10 s per test:
+160 MHz, 100 Mbit/s full duplex, interrupt driven, 10 s per test, with the
+script run by Windows Python on a Windows PC on an otherwise idle network:
 
 | Test | Board receives | Board sends |
 |------|----------------|-------------|
-| TCP, one direction | 83-89 Mbit/s | 86.1 Mbit/s |
+| TCP, one direction | 88-90 Mbit/s | 86 Mbit/s |
 | TCP, both directions | 52.4-53.0 Mbit/s | 39.5 Mbit/s |
 | UDP, one direction | 95.7 Mbit/s (no loss) | 95.7 Mbit/s |
 | UDP, both directions | 93.5-95.3 Mbit/s | 95.7 Mbit/s |
@@ -7611,7 +7612,7 @@ close to it: the board drops 0.4-2.4% of what it receives. TCP is limited by the
 CPU.
 
 With `WOLFBOOT_TEST_TFTP=1` the command fetches `TFTP_FILENAME` from
-`HOST_IP_STR` instead (128 KB at most) and prints its size and checksum
+`HOST_IP_STR` instead (40 KB at most) and prints its size and checksum
 followed by `WOLFIP_TEST: PASS` or `WOLFIP_TEST: FAIL`. Both the interrupt
 driven and the polled build pass this test.
 
