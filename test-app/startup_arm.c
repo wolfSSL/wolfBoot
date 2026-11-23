@@ -28,6 +28,12 @@ extern unsigned int _start_bss;
 extern unsigned int _end_bss;
 extern unsigned int _end_stack;
 extern unsigned int _start_heap;
+#ifdef APP_RAMCODE_ITCM
+/* Hot code copied from flash to the ITCM at reset */
+extern unsigned int _stored_ramcode_itcm;
+extern unsigned int _start_ramcode_itcm;
+extern unsigned int _end_ramcode_itcm;
+#endif
 #ifdef APP_RAMCODE_L
 /* Hot code copied from flash to a second RAM region at reset */
 extern unsigned int _stored_ramcode_l;
@@ -128,6 +134,18 @@ void isr_reset(void)
 #endif
         "b 1b\n\t"
         "2:\n\t"
+#ifdef APP_RAMCODE_ITCM
+        /* The ITCM holds no valid ECC either: clear it before the hot
+         * code is copied in, also with 64-bit stores */
+        "ldr r0, =_start_ecc_itcm\n\t"
+        "ldr r1, =_end_ecc_itcm\n\t"
+        "3:\n\t"
+        "cmp r0, r1\n\t"
+        "bhs 4f\n\t"
+        "strd r2, r3, [r0], #8\n\t"
+        "b 3b\n\t"
+        "4:\n\t"
+#endif
         "b isr_reset_c\n\t"
         );
 }
@@ -151,6 +169,16 @@ void isr_reset(void)
         dst++;
         src++;
     }
+#ifdef APP_RAMCODE_ITCM
+    src = (unsigned int *) &_stored_ramcode_itcm;
+    dst = (unsigned int *) &_start_ramcode_itcm;
+    while (dst < (unsigned int *)&_end_ramcode_itcm) {
+        *dst = *src;
+        dst++;
+        src++;
+    }
+    __asm__ volatile ("dsb\n\tisb" ::: "memory");
+#endif
 #ifdef APP_RAMCODE_L
     src = (unsigned int *) &_stored_ramcode_l;
     dst = (unsigned int *) &_start_ramcode_l;

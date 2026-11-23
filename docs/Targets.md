@@ -7574,10 +7574,15 @@ interrupt driven (`NXP_MCXE31B_EMAC_IRQ=1`, EMAC IRQ 105 routed in
 instead. `test-app/ARM-mcxe31b-wolfip.ld` keeps the driver's descriptor rings
 and frame buffers in the DTCM, which the core does not cache and the EMAC DMA
 reaches through its backdoor port, and places the wolfIP stack state, with
-9 KB TCP receive and transmit buffers per socket, and the TFTP receive buffer
-in SRAM. SRAM is ECC protected: the reset handler clears all 320 KB of it
-with 64-bit stores (`APP_RAM_ECC_INIT`) before it is used. Set
-`ENABLE_WOLFIP=1` in `mcxe31b.config` and check the wolfIP path:
+9 KB TCP receive and transmit buffers per socket, the TFTP receive buffer and
+libwolfboot's 8 KB flash sector buffer (`NVM_CACHE`) in SRAM. SRAM is ECC
+protected: the reset handler clears all 320 KB of it with 64-bit stores
+(`APP_RAM_ECC_INIT`) before it is used. The hottest network code (8.7 KB:
+runs from the ITCM: the reset handler clears the ITCM and copies it there
+(`APP_RAMCODE_ITCM`). wolfIP takes at most 16 frames per `wolfIP_poll()`
+(`WOLFIP_POLL_BUDGET=16`). The driver uses 8 transmit and 4 receive
+descriptors (19 KB of DTCM).
+Set `ENABLE_WOLFIP=1` in `mcxe31b.config` and check the wolfIP path:
 
 ```sh
 ENABLE_WOLFIP?=1
@@ -7596,10 +7601,14 @@ Ctrl-C on the console stops the server. Measured on the FRDM-MCXE31B at
 
 | Test | Board receives | Board sends |
 |------|----------------|-------------|
-| TCP, one direction | 92.3 Mbit/s | 72.5 Mbit/s |
-| TCP, both directions | 38.2 Mbit/s | 30.6 Mbit/s |
-| UDP, one direction | 95.7 Mbit/s (no loss) | 78.5 Mbit/s |
-| UDP, both directions | 71.8 Mbit/s | 71.8 Mbit/s |
+| TCP, one direction | 83-89 Mbit/s | 86.1 Mbit/s |
+| TCP, both directions | 52.4-53.0 Mbit/s | 39.5 Mbit/s |
+| UDP, one direction | 95.7 Mbit/s (no loss) | 95.7 Mbit/s |
+| UDP, both directions | 93.5-95.3 Mbit/s | 95.7 Mbit/s |
+
+UDP in one direction runs at the line rate, and both directions at once come
+close to it: the board drops 0.4-2.4% of what it receives. TCP is limited by the
+CPU.
 
 With `WOLFBOOT_TEST_TFTP=1` the command fetches `TFTP_FILENAME` from
 `HOST_IP_STR` instead (128 KB at most) and prints its size and checksum

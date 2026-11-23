@@ -1779,18 +1779,19 @@ ifeq ($(ENABLE_WOLFIP),1)
     LSCRIPT_TEMPLATE=ARM-mcxe31b-wolfip.ld
     # Clear all of SRAM at reset, before it is read (ECC)
     CFLAGS+=-DAPP_RAM_ECC_INIT
+    # Hot code in the ITCM (.ramcode_itcm in ARM-mcxe31b-wolfip.ld)
+    CFLAGS+=-DAPP_RAMCODE_ITCM
     # NXP_MCXE31B_EMAC_IRQ=0 polls the EMAC instead of using its interrupt
     NXP_MCXE31B_EMAC_IRQ?=1
     CFLAGS+=-DWOLFIP_PORT_MCXE31B_EMAC
     CFLAGS+=-DNXP_MCXE31B_EMAC_IRQ=$(NXP_MCXE31B_EMAC_IRQ)
     CFLAGS+=-DTFTP_RAM_MAX=0x20000U
-    # Six full segments of TCP buffering per socket
+    # Six full segments of TCP buffering per socket.
     CFLAGS+=-DRXBUF_SIZE=9216 -DTXBUF_SIZE=9216
     # remove -ffreestanding so small memcpy's can be inlined
     WOLFIP_CFLAGS_FILTEROUT:=-ffreestanding
-    # Take at most 8 frames per wolfIP_poll() so the app can drain a socket
-    # between batches
-    WOLFIP_CFLAGS_ADD:=-O2 -DWOLFIP_POLL_BUDGET=8
+    # Take at most 16 frames per wolfIP_poll()
+    WOLFIP_CFLAGS_ADD:=-O2 -DWOLFIP_POLL_BUDGET=16
     # Driver cycle counters for the throughput test's CPU breakdown
     ifeq ($(WOLFIP_SPEED_TEST),1)
       CFLAGS+=-DNXP_MCXE31B_EMAC_STATS=1
