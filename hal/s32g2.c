@@ -37,6 +37,9 @@
 #include "printf.h"
 #include "psci.h"
 #include "hal/s32g2.h"
+#ifdef NXP_HSE
+#include "hal/nxp_hse.h"
+#endif
 #ifdef S32G2_QSPI_PROGRAM_FILE
 #include "disk.h"
 #include "disk_fs.h"
@@ -2016,13 +2019,321 @@ static void s32g2_soc_init(void)
 #endif
 }
 
+#if defined(NXP_HSE_PROVISION) && defined(S32G2_QSPI)
+/* DRAM that HSE reads requests from and writes results to */
+#ifndef S32G2_HSE_BUF
+#define S32G2_HSE_BUF       0x90000000UL
+#endif
+#define HSE_BUF_SMALL       (S32G2_HSE_BUF)
+#define HSE_BUF_IMAGE       (S32G2_HSE_BUF + 0x100000UL)
+#define HSE_BUF_COPY        (S32G2_HSE_BUF + 0x200000UL)
+#define HSE_BUF_SYSIMG      (S32G2_HSE_BUF + 0x300000UL)
+#define HSE_BUF_SYSIMG_SZ   0x40000UL
+#define HSE_BUF_END         (HSE_BUF_SYSIMG + HSE_BUF_SYSIMG_SZ)
+#define HSE_BUF_IMAGE_MAX   0x100000UL
+/* inside HSE_BUF_SMALL */
+#define HSE_BUF_NVM_CAT     (HSE_BUF_SMALL + 0x000)
+#define HSE_BUF_RAM_CAT     (HSE_BUF_SMALL + 0x040)
+#define HSE_BUF_KEY_INFO    (HSE_BUF_SMALL + 0x080)
+#define HSE_BUF_PUB         (HSE_BUF_SMALL + 0x0C0)
+#define HSE_BUF_SIG_R       (HSE_BUF_SMALL + 0x100)
+#define HSE_BUF_SIG_S       (HSE_BUF_SMALL + 0x120)
+#define HSE_BUF_SMR         (HSE_BUF_SMALL + 0x140)
+#define HSE_BUF_CR          (HSE_BUF_SMALL + 0x1C0)
+#define HSE_BUF_SIZE_OUT    (HSE_BUF_SMALL + 0x200)
+#define HSE_BUF_OFFSET_OUT  (HSE_BUF_SMALL + 0x204)
+#define HSE_BUF_LEN_INOUT   (HSE_BUF_SMALL + 0x208)
+
+/* Signature block s32g2_mkimage.py --hse-sign puts behind the code */
+#define HSE_SIG_BLOCK_SIZE  136
+#define HSE_SIG_LEN         4
+#define HSE_SIG_PUB         8
+#define HSE_SIG_R           72
+#define HSE_SIG_S           104
+
+static uint32_t get32(const uint8_t* p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+        ((uint32_t)p[3] << 24);
+}
+
+static void put32le(uint8_t* p, uint32_t v)
+{
+    p[0] = (uint8_t)v;
+    p[1] = (uint8_t)(v >> 8);
+    p[2] = (uint8_t)(v >> 16);
+    p[3] = (uint8_t)(v >> 24);
+}
+
+static int hse_result(const char* what, int ret, uint32_t rsp)
+{
+    invalidate_dcache_range(S32G2_HSE_BUF, HSE_BUF_END);
+    wolfBoot_printf("HSE: %s: %s (%d, 0x%x)\n", what,
+        ret == 0 ? "ok" : "FAILED", ret, (unsigned int)rsp);
+    return ret;
+}
+
+/* Give HSE what it needs to verify this boot image: a key catalog, the
+ * public key from the image's signature block, an SMR entry over the bytes
+ * the ROM loads and a core reset entry for A53 core 0.
+ *
+ * With NXP_HSE_SYSIMG_OFFSET the entries name the real load address and
+ * entry point, and the system image HSE publishes is written to the NOR
+ * there. The first boot whose IVT points at it advances HSE's anti-rollback
+ * fuse counter.
+ *
+ * Without it this is a rehearsal: the SMR copies to spare DRAM, HSE is asked
+ * to load and verify it from the NOR, and nothing is stored. HSE forgets all
+ * of it at the next reset. */
+static void s32g2_hse_provision(void)
+{
+    /* one ECC public key slot in NVM group 0; one AES slot in RAM group 0.
+     * {MU mask, owner, key type, slots, max bits} */
+    static const uint8_t nvm_cat[2 * NXP_HSE_KEY_GROUP_SIZE] = { 0x0F,
+        NXP_HSE_KEY_OWNER_CUST, NXP_HSE_KEY_TYPE_ECC_PUB, 1, 0x00, 0x01 };
+    static const uint8_t ram_cat[2 * NXP_HSE_KEY_GROUP_SIZE] = { 0x0F,
+        NXP_HSE_KEY_OWNER_ANY, NXP_HSE_KEY_TYPE_AES, 1, 0x00, 0x01 };
+    uint8_t hdr[0x40];
+    uint8_t sig[HSE_SIG_BLOCK_SIZE];
+    uint32_t app, size, ram_start, entry, src, tag, rsp = 0, v;
+    uint32_t key = NXP_HSE_KEY_NVM(0, 0);
+    uint32_t dest, reset;
+    int ret;
+#ifndef NXP_HSE_SYSIMG_OFFSET
+    uint64_t t0;
+#endif
+
+    if ((rd32(S32G2_PMC_NCSPD_STAT) & S32G2_PMC_EFUSE_AT_GND) == 0) {
+        wolfBoot_printf("HSE: not provisioning, the fuse supply is on\n");
+        return;
+    }
+    if ((nxp_hse_status() & (NXP_HSE_STATUS_INIT_OK |
+            NXP_HSE_STATUS_INSTALL_OK)) != NXP_HSE_STATUS_INIT_OK)
+        return;
+    if (s32g2_qspi_read(0, hdr, sizeof(hdr)) != 0 || hdr[0] != 0xD1)
+        return;
+    app = get32(hdr + 0x20);
+    if (app >= S32G2_QSPI_FLASH_SIZE ||
+            s32g2_qspi_read(app, hdr, sizeof(hdr)) != 0 || hdr[0] != 0xD5)
+        return;
+    ram_start = get32(hdr + 4);
+    entry = get32(hdr + 8);
+    size = get32(hdr + 12);
+    src = app + 0x40;
+    tag = (src + size + 15U) & ~15U;
+    if (size == 0 || size > HSE_BUF_IMAGE_MAX ||
+            s32g2_qspi_read(tag, sig, sizeof(sig)) != 0 ||
+            memcmp(sig, "HSES", 4) != 0 || get32(sig + HSE_SIG_LEN) != size) {
+        wolfBoot_printf("HSE: no signature block at 0x%x\n",
+            (unsigned int)tag);
+        return;
+    }
+#ifdef NXP_HSE_SYSIMG_OFFSET
+    dest = ram_start;
+    reset = entry;
+#else
+    dest = (uint32_t)HSE_BUF_COPY;
+    reset = (uint32_t)HSE_BUF_COPY + (entry - ram_start);
+#endif
+    wolfBoot_printf("HSE: image 0x%x + 0x%x -> 0x%x, entry 0x%x, "
+        "signature at 0x%x\n", (unsigned int)src, (unsigned int)size,
+        (unsigned int)dest, (unsigned int)reset, (unsigned int)tag);
+
+    memset((uint8_t*)HSE_BUF_SMALL, 0, 0x1000);
+    memcpy((uint8_t*)HSE_BUF_NVM_CAT, nvm_cat, sizeof(nvm_cat));
+    memcpy((uint8_t*)HSE_BUF_RAM_CAT, ram_cat, sizeof(ram_cat));
+    memcpy((uint8_t*)HSE_BUF_PUB, sig + HSE_SIG_PUB, 64);
+    memcpy((uint8_t*)HSE_BUF_SIG_R, sig + HSE_SIG_R, 32);
+    memcpy((uint8_t*)HSE_BUF_SIG_S, sig + HSE_SIG_S, 32);
+    put32le((uint8_t*)HSE_BUF_LEN_INOUT, HSE_BUF_SYSIMG_SZ);
+    if (s32g2_qspi_read(src, (uint8_t*)HSE_BUF_IMAGE, size) != 0)
+        return;
+    memset((uint8_t*)HSE_BUF_COPY, 0, size);
+    flush_dcache_range(S32G2_HSE_BUF, HSE_BUF_END);
+
+    ret = nxp_hse_format_catalogs(HSE_BUF_NVM_CAT, HSE_BUF_RAM_CAT, &rsp);
+    if (hse_result("format key catalogs", ret, rsp) != 0)
+        return;
+    ret = nxp_hse_import_ecc_pub(key, NXP_HSE_CURVE_P256, 256,
+        HSE_BUF_KEY_INFO, HSE_BUF_PUB, &rsp);
+    if (hse_result("import P-256 public key", ret, rsp) != 0)
+        return;
+    ret = nxp_hse_smr_install(0, HSE_BUF_SMR, src, dest, size,
+        NXP_HSE_MEDIUM_QSPI, key, tag + HSE_SIG_R, tag + HSE_SIG_S,
+        HSE_BUF_IMAGE, HSE_BUF_SIG_R, HSE_BUF_SIG_S, 32, &rsp);
+    if (hse_result("install SMR 0 (signature checked)", ret, rsp) != 0)
+        return;
+    ret = nxp_hse_cr_install(0, HSE_BUF_CR, S32G2_HSE_CORE_A53_0, 1, reset,
+        &rsp);
+    if (hse_result("install core reset entry 0", ret, rsp) != 0)
+        return;
+    ret = nxp_hse_sysimg_size(HSE_BUF_SIZE_OUT, &rsp);
+    if (hse_result("system image size", ret, rsp) != 0)
+        return;
+    ret = nxp_hse_sysimg_publish(HSE_BUF_OFFSET_OUT, HSE_BUF_LEN_INOUT,
+        HSE_BUF_SYSIMG, &rsp);
+    if (hse_result("publish system image", ret, rsp) != 0)
+        return;
+    v = get32((uint8_t*)HSE_BUF_LEN_INOUT);
+
+#ifdef NXP_HSE_SYSIMG_OFFSET
+    if (v == 0 || v > HSE_BUF_SYSIMG_SZ ||
+            get32((uint8_t*)HSE_BUF_OFFSET_OUT) != 0) {
+        wolfBoot_printf("HSE: unexpected system image, not stored\n");
+        return;
+    }
+    ret = s32g2_qspi_erase(NXP_HSE_SYSIMG_OFFSET, v);
+    if (ret == 0)
+        ret = s32g2_qspi_write(NXP_HSE_SYSIMG_OFFSET,
+            (const uint8_t*)HSE_BUF_SYSIMG, v);
+    if (ret == 0)
+        ret = s32g2_qspi_read(NXP_HSE_SYSIMG_OFFSET, (uint8_t*)HSE_BUF_IMAGE,
+            v);
+    if (ret == 0 && memcmp((uint8_t*)HSE_BUF_IMAGE, (uint8_t*)HSE_BUF_SYSIMG,
+            v) != 0)
+        ret = -1;
+    wolfBoot_printf("HSE: system image %s at NOR 0x%x (%u bytes)\n",
+        ret == 0 ? "stored" : "NOT stored",
+        (unsigned int)NXP_HSE_SYSIMG_OFFSET, (unsigned int)v);
+#else
+    t0 = hal_get_timer_us();
+    ret = nxp_hse_smr_verify(0, &rsp);
+    if (hse_result("HSE loads and verifies SMR 0 from the NOR", ret,
+            rsp) == 0)
+        wolfBoot_printf("HSE: verified in %u ms, copy %s\n",
+            (unsigned int)((hal_get_timer_us() - t0) / 1000),
+            memcmp((uint8_t*)HSE_BUF_COPY, (uint8_t*)HSE_BUF_IMAGE,
+                size) == 0 ? "matches" : "DIFFERS");
+    wolfBoot_printf("HSE: rehearsal only, system image (%u bytes) not "
+        "stored\n", (unsigned int)v);
+    /* HSE used the QuadSPI controller for that. */
+    (void)s32g2_qspi_init();
+#endif
+}
+#endif
+
+#ifdef S32G2_SERDES
+#define SS_PHY_GEN_CTRL             0x0
+#define SS_PHY_GEN_CTRL_REF_USE_PAD (1U << 17)
+#define SS_PHY_MPLLA_CTRL           0x10
+#define SS_PHY_MPLLA_CTRL_LOCKED    (3U << 30)
+#define SS_RW_REG_0                 0xF0
+#define SS_RW_REG_0_MODE_MASK       0x7U        /* 0: PCIe on both lanes */
+#define SS_RW_REG_0_PHY_CR_SEL      (1U << 9)
+#define SS_RW_REG_0_CLKEN           (1U << 23)  /* internal reference */
+#define SS_PE0_GEN_CTRL_1           0x1050
+#define SS_PE0_GEN_CTRL_1_RC        0x4U
+#define SS_PE0_GEN_CTRL_3           0x1058
+#define SS_PE0_GEN_CTRL_3_LTSSM_EN  (1U << 0)
+#define SS_PHY_REG_ADDR             0x3008
+#define SS_PHY_REG_ADDR_EN          (1U << 31)
+#define SS_PHY_REG_DATA             0x300C
+#define PHY_RX_EQ_DELTA_IQ_OVRD(l)  (0x3019U + (l) * 0x100U)
+#define MC_RGM_PRST0_PCIE0          ((1U << 4) | (1U << 5)) /* SerDes, PCIe */
+#define SERDES_MPLL_LOCK_US         20000U
+
+static void s32g2_serdes_phy_write(uint32_t reg, uint32_t val)
+{
+    uintptr_t ss = S32G2_SERDES0_SS_BASE;
+
+    wr32(ss + SS_PHY_REG_ADDR, reg | SS_PHY_REG_ADDR_EN);
+    hal_delay_us(100);
+    wr32(ss + SS_PHY_REG_DATA, (rd32(ss + SS_PHY_REG_DATA) & ~0xFFU) | val);
+    hal_delay_us(100);
+}
+
+/* NXP BSP 27 and 28 kernels start their PCIe driver only if the boot loader
+ * left the PHY running, the controller a root complex and link training
+ * enabled; they train the link themselves. SerDes0 as PCIe on both lanes,
+ * 100 MHz reference from the board. */
+static void s32g2_serdes_pcie0_init(void)
+{
+    uintptr_t ss = S32G2_SERDES0_SS_BASE;
+    uint64_t end;
+    uint32_t lane;
+
+    pll_odiv_set(S32G2_PERIPH_PLL_BASE, 0, 20);
+    wr32(ss + SS_PE0_GEN_CTRL_3,
+        rd32(ss + SS_PE0_GEN_CTRL_3) & ~SS_PE0_GEN_CTRL_3_LTSSM_EN);
+
+    wr32(MC_RGM_PRST(0), rd32(MC_RGM_PRST(0)) | MC_RGM_PRST0_PCIE0);
+    (void)poll_set(MC_RGM_PSTAT(0), MC_RGM_PRST0_PCIE0);
+    wr32(ss + SS_RW_REG_0, rd32(ss + SS_RW_REG_0) & ~SS_RW_REG_0_MODE_MASK);
+    hal_delay_us(100);
+    wr32(MC_RGM_PRST(0), rd32(MC_RGM_PRST(0)) & ~MC_RGM_PRST0_PCIE0);
+    if (poll_clear(MC_RGM_PSTAT(0), MC_RGM_PRST0_PCIE0) != 0) {
+        wolfBoot_printf("s32g2: SerDes0 stays in reset, PCIe not set up\n");
+        return;
+    }
+
+    wr32(ss + SS_PHY_GEN_CTRL,
+        rd32(ss + SS_PHY_GEN_CTRL) | SS_PHY_GEN_CTRL_REF_USE_PAD);
+    wr32(ss + SS_RW_REG_0, rd32(ss + SS_RW_REG_0) & ~SS_RW_REG_0_CLKEN);
+    end = hal_get_timer_us() + SERDES_MPLL_LOCK_US;
+    while ((rd32(ss + SS_PHY_MPLLA_CTRL) & SS_PHY_MPLLA_CTRL_LOCKED) !=
+            SS_PHY_MPLLA_CTRL_LOCKED) {
+        if (hal_get_timer_us() > end) {
+            wolfBoot_printf("s32g2: SerDes0 PLL not locked (0x%x), PCIe not "
+                "set up\n", (unsigned int)rd32(ss + SS_PHY_MPLLA_CTRL));
+            return;
+        }
+    }
+
+    /* Receiver equalization override on both lanes (NXP erratum
+     * TKT0527889). */
+    wr32(ss + SS_RW_REG_0, rd32(ss + SS_RW_REG_0) | SS_RW_REG_0_PHY_CR_SEL);
+    for (lane = 0; lane < 2; lane++) {
+        s32g2_serdes_phy_write(PHY_RX_EQ_DELTA_IQ_OVRD(lane), 0x03);
+        s32g2_serdes_phy_write(PHY_RX_EQ_DELTA_IQ_OVRD(lane), 0x13);
+    }
+
+    wr32(ss + SS_PE0_GEN_CTRL_1, SS_PE0_GEN_CTRL_1_RC);
+    wr32(ss + SS_PE0_GEN_CTRL_3,
+        rd32(ss + SS_PE0_GEN_CTRL_3) | SS_PE0_GEN_CTRL_3_LTSSM_EN);
+    wolfBoot_printf("s32g2: PCIe0 PHY up, root complex\n");
+}
+#endif
+
 void hal_init(void)
 {
     s32g2_console_init();
     wolfBoot_printf("wolfBoot S32G2 (EL%d, running from SRAM)\n",
         (int)current_el());
     s32g2_soc_init();
+#ifdef S32G2_SERDES
+    s32g2_serdes_pcie0_init();
+#endif
+#ifdef NXP_HSE
+    wolfBoot_printf("s32g2: fuse supply %s\n",
+        (rd32(S32G2_PMC_NCSPD_STAT) & S32G2_PMC_EFUSE_AT_GND) != 0 ?
+        "off" : "ON");
+    nxp_hse_report();
+#if defined(NXP_HSE_PROVISION) && defined(S32G2_QSPI)
+    s32g2_hse_provision();
+#endif
+#endif
 }
+
+#ifdef NXP_HSE
+/* A DCD that switched the fuse programming supply on for HSE (GPIO25 on the
+ * RDB2 and GoldBox) leaves it on. HSE writes fuses only while it starts, so
+ * the OS does not need the supply; the rail takes tens of ms to discharge. */
+static void s32g2_efuse_supply_off(void)
+{
+    uint64_t end;
+
+    if ((rd32(S32G2_PMC_NCSPD_STAT) & S32G2_PMC_EFUSE_AT_GND) != 0)
+        return;
+    *(volatile uint8_t*)S32G2_SIUL2_0_GPDO25 = 0;
+    end = hal_get_timer_us() + 500000;
+    while ((rd32(S32G2_PMC_NCSPD_STAT) & S32G2_PMC_EFUSE_AT_GND) == 0 &&
+            hal_get_timer_us() < end)
+        ;
+    wolfBoot_printf("s32g2: fuse supply switched %s\n",
+        (rd32(S32G2_PMC_NCSPD_STAT) & S32G2_PMC_EFUSE_AT_GND) != 0 ?
+        "off" : "off, but it still reads ON");
+}
+#endif
 
 void hal_prepare_boot(void)
 {
@@ -2034,6 +2345,9 @@ void hal_prepare_boot(void)
     /* The BSP Linux QuadSPI driver assumes a 200 MHz serial clock and never
      * changes this divider; at a slower clock its DLL lock wait never ends. */
     (void)s32g2_cgm_div_set(S32G2_MC_CGM0_BASE, 12, 0, S32G2_QSPI_2X_OS_DIV);
+#ifdef NXP_HSE
+    s32g2_efuse_supply_off();
+#endif
 }
 
 /* No internal flash: wolfBoot runs from SRAM. Provide the required no-op

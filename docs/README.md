@@ -26,6 +26,7 @@ See also: [wolfBoot Product Overview](https://www.wolfssl.com/products/wolfboot/
 - [**MCXN947-DICE.md**](./MCXN947-DICE.md) - DICE / PSA initial attestation sample on NXP MCXN947 using the EdgeLock Secure Subsystem.
 - [**measured_boot.md**](./measured_boot.md) - Measured boot concepts and recording measurements (e.g., PCRs).
 - [**png/**](./png) - Folder of images/diagrams referenced by the documentation.
+- [**NXP_HSE.md**](./NXP_HSE.md) - NXP Hardware Security Engine (HSE) secure boot: the HSE host driver, provisioning steps on the S32G2, what is permanent, recovery.
 - [**PolarFire.md**](./PolarFire.md) - Microchip PolarFire SoC: quick start, boot configurations, sNVM/PUF key storage, SBI vendor extension, boot mode 2.
 - [**PQ.md**](./PQ.md) - Post-quantum algorithms and PQC support in wolfBoot.
 - [**README.md**](./README.md) - Overview and index of the documentation set.

@@ -160,6 +160,8 @@ tools/unit-tests/unit-update-disk-fs-confirm
 tools/unit-tests/unit-update-disk-fs-confirm-fdt
 tools/unit-tests/unit-psci
 tools/unit-tests/unit-s32g2-nor-update
+tools/unit-tests/unit-nxp-hse
+tools/unit-tests/unit-nxp-hse-addr32
 tools/unit-tests/ext4-min.img
 tools/unit-tests/ext4-stock.img
 tools/unit-tests/ext4-payload.bin

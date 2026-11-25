@@ -51,6 +51,7 @@
 /* Reset Generation Module: destructive and functional reset-cause flags,
  * write-1-to-clear. */
 #define S32G2_MC_RGM_BASE           0x40078000
+#define S32G2_SERDES0_SS_BASE       0x40480000
 #define MC_RGM_DES                  0x00
 #define MC_RGM_FES                  0x08
 
@@ -81,6 +82,16 @@
 #define S32G2_QSPI_CLK_MSCR_VAL     0x00200001
 #define S32G2_QSPI_CS_MSCR_VAL      0x00203001
 #define S32G2_QSPI_IMCR_VAL         0x2
+/* HSE: Messaging Unit 0, the memory its service descriptors are read from,
+ * and 64-bit addresses in the requests */
+#define NXP_HSE_MU_BASE             0x40210000UL
+#define NXP_HSE_DESC_BASE           0x22C00000UL
+#define NXP_HSE_ADDR64
+#define S32G2_HSE_CORE_A53_0        3U
+/* Fuse programming supply: monitor, and its switch on the RDB2 / GoldBox */
+#define S32G2_PMC_NCSPD_STAT        0x4008C00CUL
+#define S32G2_PMC_EFUSE_AT_GND      (1UL << 4)
+#define S32G2_SIUL2_0_GPDO25        0x4009D31AUL
 #ifndef S32G2_QSPI_2X_DIV
 #define S32G2_QSPI_2X_DIV           3   /* 800 MHz / 3 = 267 MHz QSPI_2X, 133 MHz SCK */
 #endif

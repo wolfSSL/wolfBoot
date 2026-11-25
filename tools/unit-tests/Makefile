@@ -199,6 +199,7 @@ TESTS+=unit-fwtpm-cmd-toctou
 TESTS+=unit-fdt-memrsv-wrap
 TESTS+=unit-psci
 TESTS+=unit-s32g2-nor-update
+TESTS+=unit-nxp-hse unit-nxp-hse-addr32
 TESTS+=unit-fdt-addr32
 TESTS+=unit-ns16550
 TESTS+=unit-zynq-dma-range
@@ -898,6 +899,12 @@ unit-string: ../../include/target.h unit-string.c
 
 unit-psci: ../../include/target.h unit-psci.c ../../src/psci.c
 	gcc -o $@ unit-psci.c $(CFLAGS) $(LDFLAGS)
+
+unit-nxp-hse: ../../include/target.h unit-nxp-hse.c ../../hal/nxp_hse.c
+	gcc -o $@ unit-nxp-hse.c -I../.. $(CFLAGS) $(LDFLAGS)
+
+unit-nxp-hse-addr32: ../../include/target.h unit-nxp-hse.c ../../hal/nxp_hse.c
+	gcc -o $@ unit-nxp-hse.c -I../.. -DUNIT_NXP_HSE_ADDR32 $(CFLAGS) $(LDFLAGS)
 
 unit-arm-tee-psa-ipc: ../../include/target.h unit-arm-tee-psa-ipc.c ../../src/arm_tee_psa_ipc.c
 	gcc -o $@ unit-arm-tee-psa-ipc.c $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa \

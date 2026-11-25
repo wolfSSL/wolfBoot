@@ -988,6 +988,30 @@ jobs:
       config-file: ./config/examples/s32g2-goldbox.config
       make-args: S32G2_QSPI=1 S32G2_QSPI_PROGRAM_FILE=/s32g2_qspi_boot.bin wolfboot.bin
 
+  s32g2_hse_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # HSE host interface: firmware state reported at boot.
+      config-file: ./config/examples/s32g2-goldbox.config
+      make-args: NXP_HSE=1 wolfboot.bin
+
+  s32g2_hse_provision_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # HSE provisioning from the NOR first stage, system image stored.
+      config-file: ./config/examples/s32g2-goldbox-qspi.config
+      make-args: NXP_HSE=1 NXP_HSE_PROVISION=1 NXP_HSE_SYSIMG_OFFSET=0xC0000 wolfboot.bin
+
+  s32g2_hse_rehearsal_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # HSE provisioning rehearsal: nothing stored.
+      config-file: ./config/examples/s32g2-goldbox-qspi.config
+      make-args: NXP_HSE=1 NXP_HSE_PROVISION=1 wolfboot.bin
+
   disk_boot_confirm_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:

@@ -11110,10 +11110,32 @@ Measured on a GoldBox with the example configurations as they are (`DEBUG=0`, wo
 | QuadSPI NOR | 143872 bytes | 0.43 | 0.93 | 1.34 | 2.31 |
 
 `DEBUG_UART=0` removes the wolfBoot console and 8 to 12 KB. `DEBUG=1` builds without optimization for debugging: the image grows by 53 to 66 KB and the kernel is entered about 1.5 s later.
+### HSE secure boot
+
+Without HSE the chain of trust starts at wolfBoot: the Boot ROM loads it unchecked, and wolfBoot verifies the FIT. With NXP's Hardware Security Engine (HSE) firmware and secure boot switched on, HSE verifies wolfBoot (ECDSA P-256) and only then releases Cortex-A53 core 0 into it.
+
+**[NXP_HSE.md](NXP_HSE.md) is the documentation for this feature**: what HSE needs, the steps with their console output, what is permanent, recovery and limits. The tables below are the summary.
+
+| Build option | Effect |
+|---|---|
+| `NXP_HSE=1` | Builds the HSE host driver and reports the HSE state at boot. |
+| `NXP_HSE_PROVISION=1` | Gives HSE the key, the SMR and the core reset entry at boot. On its own a rehearsal that stores nothing. |
+| `NXP_HSE_SYSIMG_OFFSET=<offset>` | With `NXP_HSE_PROVISION=1`: stores HSE's system image in the NOR at this offset. |
+
+| `s32g2_mkimage.py` option | Effect |
+|---|---|
+| `--hse-fw <firmware>` | Places the HSE firmware in the image and points the IVT at it. |
+| `--hse-sign <P-256 key.pem>` | Signs the code the ROM loads for HSE. |
+| `--hse-sysimg <offset>` | Points the IVT at the stored system image. |
+| `--hse-efuse` | Switches the fuse programming supply on in the DCD. |
+| `--hse-boot-seq` | Sets the secure boot bit. |
+
+Validated on a GoldBox (S32G274A rev 2.1) with the HSE Standard firmware 0.1.0.5, booting from QuadSPI NOR, in the development lifecycle. Provisioning advances HSE's anti-rollback fuse counter by one step; a plain image without HSE still boots afterwards. The HSE firmware comes from NXP and is not part of wolfBoot.
 
 ### Known limitations
 
-- Inline DRAM ECC, HSE secure boot and chain-loading BL31 (for kernels that need SCMI or PSCI power states) are not implemented.
+- Inline DRAM ECC and chain-loading BL31 (for kernels that need SCMI or PSCI power states) are not implemented.
+- The SerDes is not initialized by default. NXP BSP 27 and 28 kernels expect the boot loader to have set up the PCIe PHY and otherwise stop with `u-boot did not initialize PCIE PHY`; later BSP kernels set it up themselves. `S32G2_SERDES=1` makes wolfBoot bring up SerDes0 as PCIe0 (both lanes, root complex, the board's 100 MHz reference clock) and leave link training to the kernel. With no device fitted that kernel waits about 2 s for a link. Validated with the slot empty: the kernel's driver starts and registers the root port; a link to a device was not tested. SerDes1 (PCIe1, SGMII) is not set up.
 
 ## NXP i.MX95 Cortex-M7
 
