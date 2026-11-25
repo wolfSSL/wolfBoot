@@ -37,6 +37,7 @@ static uint8_t cm4_mock_emmc[0x100];
 #define DISK_SDCARD 1
 
 #include "../../hal/cm4.c"
+#include "../../hal/rpi_common.c"
 
 /* Cadence SRS offset the generic driver uses (0x200 + std). */
 #define SRS(n) (CADENCE_SRS_OFFSET + (n))

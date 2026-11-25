@@ -487,11 +487,26 @@ ifeq ($(ARCH),AARCH64)
     # AArch64 asm, which is gated on __aarch64__ in include/user_settings.h. So
     # -mstrict-align keeps every config safe either way.
     CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72 -mstrict-align
+    OBJS+=hal/rpi_common.o
     # RAUC A/B slot selection via a raw U-Boot env partition (wolfBoot replaces
     # U-Boot's boot script). Adds the env state-machine module + define.
     ifeq ($(CM4_RAUC_AB),1)
       OBJS+=src/ubootenv.o
       CFLAGS+=-DCM4_RAUC_AB
+    endif
+  endif
+
+  ifeq ($(TARGET),cm5)
+    # Raspberry Pi Compute Module 5 - Broadcom BCM2712, Cortex-A76
+    ARCH_FLAGS=-mcpu=cortex-a76+crypto -mtune=cortex-a76
+    # -mstrict-align: the RAM-boot config runs with the MMU off, where all
+    # memory is Device-nGnRnE and unaligned access faults.
+    CFLAGS+=$(ARCH_FLAGS) -mstrict-align
+    OBJS+=hal/rpi_common.o
+    # RAUC A/B slot selection via a raw U-Boot env partition, as on cm4.
+    ifeq ($(RPI_RAUC_AB),1)
+      OBJS+=src/ubootenv.o
+      CFLAGS+=-DRPI_RAUC_AB
     endif
   endif
 

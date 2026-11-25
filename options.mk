@@ -2808,11 +2808,11 @@ ifeq ($(FIPS),1)
   endif
   # The FIPS module pulls in libc malloc/printf. On a bare-metal newlib target,
   # stub the syscalls with nosys.specs; the HAL provides a bounded _sbrk so the
-  # heap cannot grow into the unverified image (see hal/cm4.c). This is WRONG for
+  # heap cannot grow into the unverified image (rpi_common.c). This is WRONG for
   # a hosted / glibc-cross toolchain, so make it opt-in per target rather than
   # "every non-sim ARCH" - a new bare-metal FIPS target sets FIPS_NOSYS_SPECS=1.
   FIPS_NOSYS_SPECS ?= 0
-  ifeq ($(TARGET),cm4)
+  ifneq ($(filter cm4 cm5,$(TARGET)),)
     FIPS_NOSYS_SPECS = 1
   endif
   ifeq ($(FIPS_NOSYS_SPECS),1)
