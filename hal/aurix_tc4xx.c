@@ -87,6 +87,9 @@ _Static_assert(WOLFBOOT_WOLFHSM_CLIENT_ID == TCHSM_HSMHOST_CLIENT_APP0,
 #define GET_PAGE_ADDR(addr) ((uintptr_t)(addr) & ~(TC4_PFLASH_PAGE_SIZE - 1))
 #define GET_SECTOR_ADDR(addr) ((uintptr_t)(addr) & ~(WOLFBOOT_SECTOR_SIZE - 1))
 
+_Static_assert(WOLFBOOT_SECTOR_SIZE == TC4_PFLASH_SECTOR_SIZE,
+               "WOLFBOOT_SECTOR_SIZE must be the PFLASH erase sector size");
+
 /* RAM buffer holding one flash sector for read-modify-write operations */
 static uint32_t sectorBuffer[WOLFBOOT_SECTOR_SIZE / sizeof(uint32_t)];
 
@@ -164,7 +167,11 @@ static int RAMFUNCTION programBytesToErasedFlash(uint32_t       address,
     return 0;
 }
 
-#if defined(DEBUG_UART) || defined(UART_FLASH)
+#ifdef UART_FLASH
+#error "AURIX TC4xx does not support UART_FLASH"
+#endif
+
+#ifdef DEBUG_UART
 
 #define TC4_UART_BAUD (115200u)
 
@@ -181,7 +188,6 @@ static tc4_uartpin_t tc4Uart = {
 };
 
 int  uart_tx(const uint8_t c);
-int  uart_rx(uint8_t* c);
 void uart_init(void);
 void uart_write(const char* buf, unsigned int sz);
 
@@ -200,14 +206,12 @@ int uart_tx(const uint8_t c)
     if (!tc4UartReady) {
         return 0;
     }
-    tc4_uart_Write8(&tc4Uart, c);
+    /* A stalled transmitter takes the console down after one timeout */
+    if (tc4_uart_Write8(&tc4Uart, c) != 0) {
+        tc4UartReady = 0;
+        return 0;
+    }
     return 1;
-}
-
-int uart_rx(uint8_t* c)
-{
-    (void)c;
-    return 0;
 }
 
 void uart_write(const char* buf, unsigned int sz)
@@ -221,7 +225,7 @@ void uart_write(const char* buf, unsigned int sz)
     }
 }
 
-#endif /* DEBUG_UART || UART_FLASH */
+#endif /* DEBUG_UART */
 
 /*
  * wolfBoot HAL entry points
@@ -274,7 +278,7 @@ void hal_prepare_boot(void)
      * in-flight characters */
     wolfBoot_printf("hal_prepare_boot\n");
     if (tc4UartReady) {
-        tc4_uart_BlockOnTC(&tc4Uart);
+        (void)tc4_uart_BlockOnTC(&tc4Uart);
     }
 #endif
 
