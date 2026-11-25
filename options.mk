@@ -2685,6 +2685,10 @@ ifeq ($(ARCH),AARCH64)
     ifneq (,$(filter %/wolfcrypt/src/chacha.o,$(WOLFCRYPT_OBJS)))
       WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-chacha-asm_c.o
     endif
+    # wc_mldsa.c calls the NEON polynomial routines in this port file.
+    ifneq (,$(filter %/wolfcrypt/src/wc_mldsa.o,$(WOLFCRYPT_OBJS)))
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-mldsa-asm_c.o
+    endif
   endif
 endif
 # ---------------------------------------------------------------------------

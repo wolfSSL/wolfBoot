@@ -1503,13 +1503,15 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
     if (readLen > (int)keySz) {
         if (ktype == AUTH_KEY_ECC256 || ktype == AUTH_KEY_ECC384 ||
             ktype == AUTH_KEY_ECC521) {
-            initKey = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
+            initKey = ret = wc_ecc_init(eccKey);
+            if (ret == 0)
+                ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
 
             if (ret == 0) {
                 ret = wc_ecc_export_public_raw(eccKey, buf, &qxSz,
                     buf + keySz / 2, &qySz);
             }
-            else {
+            else if (initKey == 0) {
                 /* Not DER. A keystore slot is zero-padded out to the widest
                  * algorithm in the build, so a raw key read back out of one
                  * has nothing but zeros past its own length and the
@@ -1529,8 +1531,10 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
                 wc_ecc_free(eccKey);
         }
         else if (ktype == AUTH_KEY_ED25519) {
-            initKey = ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
-                ed25519Key, readLen);
+            initKey = ret = wc_ed25519_init(ed25519Key);
+            if (ret == 0)
+                ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
+                    ed25519Key, readLen);
             if (ret < 0)
                 printf("error: wc_Ed25519PublicKeyDecode failed on %s\n", fname);
 
@@ -1543,8 +1547,10 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
                 wc_ed25519_free(ed25519Key);
         }
         else if (ktype == AUTH_KEY_ED448) {
-            initKey = ret = wc_Ed448PublicKeyDecode(buf, &keySzOut,
-                ed448Key, readLen);
+            initKey = ret = wc_ed448_init(ed448Key);
+            if (ret == 0)
+                ret = wc_Ed448PublicKeyDecode(buf, &keySzOut,
+                    ed448Key, readLen);
 
             if (ret == 0)
                 ret = wc_ed448_export_public(ed448Key, buf, &qxSz);
