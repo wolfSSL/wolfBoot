@@ -87,7 +87,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-update-flash-self-update-monolithic \
        unit-nsc-update \
        unit-update-flash-enc unit-update-flash-enc-full unit-update-flash-enc-intswap unit-update-ram unit-update-ram-fit unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-compressed-tlv unit-custom-trailer-nopart unit-update-flash-hwswap unit-update-flash-custom-trailer unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
-       unit-update-disk unit-update-disk-confirm unit-update-disk-golden unit-update-disk-failover unit-update-disk-golden-enckey unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-update-disk-fit-ramdisk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
+       unit-update-disk unit-update-disk-confirm unit-update-disk-golden unit-update-disk-failover unit-update-disk-golden-enckey unit-update-disk-fsp unit-update-disk-oob unit-update-disk-amp unit-update-disk-fit unit-update-disk-fit-ramdisk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
@@ -175,6 +175,7 @@ TESTS+=unit-versal-wdt
 TESTS+=unit-versal-uart-rx
 TESTS+=unit-raspi3-uart-rx
 TESTS+=unit-mpfs-wdt
+TESTS+=unit-mpfs-wdt-os-owned
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
@@ -664,6 +665,9 @@ unit-update-disk-fs:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-disk-oob:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-disk-amp:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
+	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 -DUNIT_DISK_AMP \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 # FIT (flattened uImage tree) exits of the encrypted disk loader. The panic hook
 # is what lets the test observe the key material at the instant wolfBoot_panic()
@@ -1566,6 +1570,9 @@ unit-update-disk-fsp: ../../include/target.h unit-update-disk-fsp.c
 unit-update-disk-oob: ../../include/target.h unit-update-disk-oob.c
 	gcc -o $@ unit-update-disk-oob.c $(CFLAGS) $(LDFLAGS)
 
+unit-update-disk-amp: ../../include/target.h unit-update-disk-oob.c
+	gcc -o $@ unit-update-disk-oob.c $(CFLAGS) $(LDFLAGS)
+
 # Disk loader reading its image from a file. Mocks only the raw block
 # layer, so the real gpt/disk/disk_fs/fat32/ext4 stack runs underneath.
 unit-update-disk-fs: ../../include/target.h unit-update-disk-fs.c
@@ -2078,6 +2085,11 @@ mpfs-wdt-gate-check:
 
 unit-mpfs-wdt: unit-mpfs-wdt.c mpfs250_wdt_extract.h | mpfs-wdt-gate-check
 	gcc -o $@ unit-mpfs-wdt.c $(CFLAGS) $(LDFLAGS)
+
+# The same function in an HSS S-mode payload with MPFS_WDT_NODES_KEEP, which
+# must leave every watchdog untouched for the OS driver to program.
+unit-mpfs-wdt-os-owned: unit-mpfs-wdt.c mpfs250_wdt_extract.h | mpfs-wdt-gate-check
+	gcc -o $@ unit-mpfs-wdt.c $(CFLAGS) -DMPFS_WDT_NODES_KEEP $(LDFLAGS)
 
 # unit-t10xx-qe-firmware runs the real qe_check_firmware() from
 # hal/nxp_t10xx.c (the per-microcode code_offset was never
