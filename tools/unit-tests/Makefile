@@ -259,7 +259,8 @@ endif
 # dependency as the CMake x86_64_efi target). Probe and only add the test
 # when they are installed, so a default "make" stays portable on hosts
 # without them.
-HAVE_GNU_EFI := $(wildcard /usr/include/efi/efi.h)
+GNU_EFI_INCLUDE ?= /usr/include/efi
+HAVE_GNU_EFI := $(wildcard $(GNU_EFI_INCLUDE)/efi.h)
 ENABLE_EFI_TESTS ?= $(if $(HAVE_GNU_EFI),1,0)
 ifeq ($(ENABLE_EFI_TESTS),1)
 TESTS+=unit-efi-x86-open-image
@@ -2751,7 +2752,7 @@ unit-t10xx-dts-memac: unit-t10xx-dts-memac.c nxp_t10xx_fixup_extract.h ../../src
 # 16-bit wchar_t is what makes efi_main's L"..." literals valid CHAR16
 # strings under gnu-efi 4.x (CHAR16 = uint16_t).
 unit-efi-x86-open-image: unit-efi-x86-open-image.c ../../hal/x86_64_efi.c
-	gcc -o $@ unit-efi-x86-open-image.c -I/usr/include/efi -I/usr/include/efi/x86_64 -DTARGET_X86_64_EFI -fshort-wchar $(CFLAGS) $(LDFLAGS)
+	gcc -o $@ unit-efi-x86-open-image.c -I$(GNU_EFI_INCLUDE)/.. -I$(GNU_EFI_INCLUDE) -I$(GNU_EFI_INCLUDE)/x86_64 -DTARGET_X86_64_EFI -fshort-wchar $(CFLAGS) $(LDFLAGS)
 
 # NXP HAL tests include hal/<chip>.c directly. SDK headers go in as -isystem
 # so their own 64-bit-host warnings stay out of the test build.
