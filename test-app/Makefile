@@ -1672,18 +1672,13 @@ ifneq (,$(filter aurix_tc4xx aurix_tc4xx_csrm,$(TARGET)))
   # Limit __WOLFBOOT to objects that define RAMFUNCTION helpers.
   hal_$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
   ../test-app/libwolfboot.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+  $(TCHSM_WB_WOLFLLD)/src/tc4_flash.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
   ifeq ($(TARGET),aurix_tc4xx_csrm)
-    # CSRM app uses the shared startup and driver objects.
-    APP_OBJS += $(TC4_LLD_SRCS:.c=.o)
-    APP_OBJS += $(TC4_WB_DIR)/csrm/Cfg_Ssw/Ifx_Cfg_Ssw.o
+    APP_OBJS += $(TCHSM_WB_CSRM_LLD_OBJS)
     # CSRM app linker script ships with the port.
     LSCRIPT_TEMPLATE = $(TC4_WB_DIR)/csrm/tc4cs_app.ld
   else
-    # Host test-app uses patched iLLD startup and drivers from the TC4 port.
-    # Drop Ifx_Ssw_Tc0.o and replace with patched aurix_tc4xx_ssw_tc0.o below
-    APP_OBJS += $(filter-out %/Ifx_Ssw_Tc0.o,$(TC4_LLD_SRCS:.c=.o))
-    APP_OBJS += $(TC4_WB_DIR)/Cfg_Ssw/Ifx_Cfg_Ssw.o
-    APP_OBJS += aurix_tc4xx_ssw_tc0.o
+    APP_OBJS += $(TCHSM_WB_HOST_LLD_OBJS)
     # Host app linker script ships with the port.
     LSCRIPT_TEMPLATE = $(TC4_WB_DIR)/tc4tc_app.ld
   endif
@@ -1693,14 +1688,6 @@ ifneq (,$(filter aurix_tc4xx aurix_tc4xx_csrm,$(TARGET)))
     APP_OBJS += $(TCHSM_WB_WOLFHSM_OBJS) $(TCHSM_WB_CLIENT_OBJS) \
                 $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
   endif
-
-# Build Ifx_Ssw_Tc0.c a second time as aurix_tc4xx_ssw_tc0.o with the
-# hypervisor exit compiled out, since wolfBoot already ran it before
-# jumping to the app. The new name keeps it from conflicting with the
-# bootloader's Ifx_Ssw_Tc0.o, which is built from the same file
-aurix_tc4xx_ssw_tc0.o: $(TC4_LLD_DIR)/Infra/Ssw/TC4xx/Tricore/Ifx_Ssw_Tc0.c
-	@echo "\t[CC-APP] $@"
-	$(Q)$(CC) $(CFLAGS) -DIFX_CFG_SSW_SKIP_DISABLE_VIRTUALIZATION -c -o $@ $<
 
 # Default goal for argument-less sub-makes.
 .DEFAULT_GOAL := image.bin

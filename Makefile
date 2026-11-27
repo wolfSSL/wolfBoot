@@ -306,9 +306,8 @@ CFLAGS+=$(WOLFPSA_CFLAGS)
 ifeq ($(USE_GCC_HEADLESS),1)
   CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding
   ifneq (,$(filter aurix_tc4xx aurix_tc4xx_csrm,$(TARGET)))
-    # No -fdata-sections: tricore-elf-gcc 13 emits bare-named data sections
-    # (.varname, not .bss.varname) that escape the iLLD linker script's
-    # clear/copy tables, leaving statics uninitialized at boot.
+    # No -fdata-sections: gcc 13's bare-named data sections (.varname) escape
+    # the linker script's clear/copy tables and stay uninitialized at boot.
     CFLAGS+=-ffunction-sections -fomit-frame-pointer
   else ifeq ($(TARGET)-$(GCC),aurix_tc3xx-1)
     # Same as above for the TC3xx host built with tricore-elf-gcc (GCC=1)
