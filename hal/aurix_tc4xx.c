@@ -234,7 +234,9 @@ void uart_write(const char* buf, unsigned int sz)
 void hal_init(void)
 {
 #ifdef TARGET_aurix_tc4xx_csrm
-    tc4_wtu_Disable(TC4_WTU_WDTSEC);
+    if (tc4_wtu_Disable(TC4_WTU_WDTSEC) != 0) {
+        wolfBoot_panic();
+    }
 
     /* The CSRM PFLASH bank must be allocated to the CSRM or the CSCI
      * command writes will fail silently */
@@ -242,8 +244,10 @@ void hal_init(void)
         wolfBoot_panic();
     }
 #else
-    tc4_wtu_Disable(TC4_WTU_WDTCPU(0u));
-    tc4_wtu_Disable(TC4_WTU_WDTSYS);
+    if ((tc4_wtu_Disable(TC4_WTU_WDTCPU(0u)) != 0) ||
+        (tc4_wtu_Disable(TC4_WTU_WDTSYS) != 0)) {
+        wolfBoot_panic();
+    }
 
     /* Refuse to run if a host PFLASH bank has been reallocated to CSRM. */
     if ((TC4_REG32(TC4_DMU_GP_BKALLOC) & 0xFu) != 0u) {
