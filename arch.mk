@@ -401,6 +401,21 @@ ifeq ($(ARCH),AARCH64)
       endif
       CFLAGS+=-DS32G2_USDHC_MAX_CLK_KHZ=$(S32G2_USDHC_MAX_CLK_KHZ)
     endif
+    # Report the NXP HSE firmware's state at boot (s32g2_mkimage.py --hse-fw).
+    ifeq ($(NXP_HSE),1)
+      CFLAGS+=-DNXP_HSE
+      OBJS+=hal/nxp_hse.o
+      ifeq ($(NXP_HSE_PROVISION),1)
+        CFLAGS+=-DNXP_HSE_PROVISION
+        ifneq ($(NXP_HSE_SYSIMG_OFFSET),)
+          CFLAGS+=-DNXP_HSE_SYSIMG_OFFSET=$(NXP_HSE_SYSIMG_OFFSET)
+        endif
+      endif
+    endif
+    # PCIe0 PHY setup, for kernels that expect it from the boot loader
+    ifeq ($(S32G2_SERDES),1)
+      CFLAGS+=-DS32G2_SERDES
+    endif
     # QuadSPI NOR driver (the ext_flash API with EXT_FLASH=1)
     ifeq ($(S32G2_QSPI),1)
       CFLAGS+=-DS32G2_QSPI
