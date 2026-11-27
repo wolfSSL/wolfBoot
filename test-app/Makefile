@@ -1053,7 +1053,7 @@ ifeq ($(WOLFHAL),1)
     $(error BOARD=$(BOARD) has no hal/boards/$(BOARD)/board.mk)
   endif
   WOLFHAL_ROOT?=$(WOLFBOOT_ROOT)/lib/wolfHAL
-  CFLAGS+=-I$(WOLFHAL_ROOT) -DWHAL_CFG_NO_TIMEOUT -I$(WOLFBOOT_ROOT)/hal/boards/$(BOARD)
+  CFLAGS+=-I$(WOLFHAL_ROOT) -I$(WOLFBOOT_ROOT)/hal/boards/$(BOARD)
   DEBUG_UART=1
   APP_OBJS+=board_$(BOARD).o
   include $(WOLFBOOT_ROOT)/hal/boards/$(BOARD)/board.mk
@@ -1574,6 +1574,18 @@ ifeq ($(TARGET),versal)
   # Enable DEBUG_UART for test-app to use wolfBoot_printf and hal functions
   DEBUG_UART:=1
   CFLAGS+=-DDEBUG_UART
+endif
+
+ifeq ($(TARGET),versal2)
+  LSCRIPT_TEMPLATE:=AARCH64.ld
+  LDFLAGS+=-nostdlib
+  # DEBUG_UART lets the test-app use wolfBoot_printf and the HAL
+  DEBUG_UART:=1
+  CFLAGS+=-DDEBUG_UART -DTESTAPP_VERSION=$(WOLFBOOT_VERSION)
+  # A wolfHAL board (WOLFHAL=1 BOARD=vek385). Its app is app_versal2.c, not
+  # the generic app_wolfhal.c: it prints the version markers the QEMU and
+  # board tests check, and the board has no LED GPIO.
+  APP_OBJS:=$(patsubst app_wolfhal.o,app_versal2.o,$(APP_OBJS))
 endif
 
 ifeq ($(TARGET),zynq)

@@ -32,6 +32,8 @@
  * compile in for the active target. */
 #if defined(TARGET_versal)
 #include "hal/versal.h"
+#elif defined(TARGET_versal2)
+#include "hal/versal2.h"
 #elif defined(TARGET_agilex5)
 #include "hal/agilex5.h"
 #elif defined(TARGET_zynq)
