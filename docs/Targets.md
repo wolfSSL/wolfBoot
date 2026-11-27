@@ -4951,6 +4951,31 @@ Typical boot timing with ECC384/SHA384 signing:
 
 ---
 
+### Post-quantum signed and encrypted images
+
+The Versal configurations also build with ML-DSA-87 signatures and AES-256 encrypted images by adding make arguments:
+
+```sh
+# QSPI, two fixed slots at 0x800000 and 0xC00000
+cp config/examples/versal_vmk180.config .config
+make SIGN=ML_DSA ML_DSA_LEVEL=5 IMAGE_SIGNATURE_SIZE=4627 IMAGE_HEADER_SIZE=12288 \
+    ENCRYPT=1 ENCRYPT_WITH_AES256=1 CUSTOM_ENCRYPT_KEY=1 ENCRYPT_CACHE=0x08200000 \
+    DUALBOOT_ROLLBACK_UNCONFIRMED=1 WOLFBOOT_PARTITION_SIZE=0x400000 \
+    WOLFBOOT_PARTITION_UPDATE_ADDRESS=0xC00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x1000000
+
+# SD card A/B slots
+cp config/examples/versal_vmk180_sdcard.config .config
+make SIGN=ML_DSA ML_DSA_LEVEL=5 IMAGE_SIGNATURE_SIZE=4627 IMAGE_HEADER_SIZE=12288 \
+    ENCRYPT=1 ENCRYPT_WITH_AES256=1 CUSTOM_ENCRYPT_KEY=1 DISK_BOOT_CONFIRM=1 \
+    WOLFBOOT_SECTOR_SIZE=0x4000
+```
+
+The QSPI flash is not memory mapped, so wolfBoot reads the ciphertext of the selected slot into DDR at `WOLFBOOT_LOAD_ADDRESS`, decrypts it in place and verifies it there.
+
+The platform supplies the image key through the `CUSTOM_ENCRYPT_KEY` hooks. `hal/versal.c` has weak defaults that fail, so an encrypted image does not boot until `wolfBoot_get_encrypt_key()` is provided, for example from eFuse, BBRAM or a PUF-wrapped store; link it with `OBJS_EXTRA=<file>.o`.
+
+With `DUALBOOT_ROLLBACK_UNCONFIRMED=1` (see [compile.md](compile.md#roll-back-an-unconfirmed-image-in-dual-boot-mode)) wolfBoot reports the slot it booted to the application in the device tree as `/chosen/wolfboot,boot-part` (0 = boot slot, 1 = update slot), so a bare-metal application can confirm its own slot with `wolfBoot_success_part()`, write an update to the other one and arm it with `wolfBoot_update_trigger_part()`. ML-DSA-87 verification needs a deep stack; the EL2 stack in `hal/versal.ld` is sized for it.
+
 ### SD Card Boot (MBR + A/B)
 
 Use `config/examples/versal_vmk180_sdcard.config`. This uses the Arasan SDHCI controller and an **MBR** partitioned SD card.

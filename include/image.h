@@ -1797,7 +1797,16 @@ int keyslot_id_by_sha(const uint8_t *hint);
 # define PART_IS_EXT(x) (!(x)->not_ext) && PARTN_IS_EXT(((x)->part))
 
 
-#if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST))
+/* An MMU target that loads the image from external flash to RAM keeps the
+ * ciphertext in flash as written and decrypts it in RAM
+ * (wolfBoot_ram_decrypt), so flash access for headers and trailers is raw. */
+#if defined(EXT_ENCRYPTED) && defined(MMU) && defined(EXT_FLASH) && \
+    defined(NO_XIP)
+    #define WOLFBOOT_RAM_DECRYPT_EXT
+#endif
+
+#if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_RAM_DECRYPT_EXT) && \
+    (defined(__WOLFBOOT) || defined(UNIT_TEST))
 #define ext_flash_check_write ext_flash_encrypt_write
 #define ext_flash_check_read ext_flash_decrypt_read
 #else

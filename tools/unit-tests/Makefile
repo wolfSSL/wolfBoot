@@ -86,7 +86,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-update-flash-self-update-ecc \
        unit-update-flash-self-update-monolithic \
        unit-nsc-update \
-       unit-update-flash-enc unit-update-flash-enc-full unit-update-flash-enc-intswap unit-update-ram unit-update-ram-fit unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-compressed-tlv unit-custom-trailer-nopart unit-update-flash-hwswap unit-update-flash-custom-trailer unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
+       unit-update-flash-enc unit-update-flash-enc-cache unit-update-flash-enc-full unit-update-flash-enc-intswap unit-update-ram unit-update-ram-fit unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-start unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-update-ram-rollback-unconfirmed unit-compressed-tlv unit-custom-trailer-nopart unit-update-flash-hwswap unit-update-flash-custom-trailer unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
        unit-update-disk unit-update-disk-confirm unit-update-disk-golden unit-update-disk-failover unit-update-disk-golden-enckey unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-update-disk-fit-ramdisk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
@@ -568,6 +568,13 @@ unit-update-flash-hwswap:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TES
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# unit-update-ram with an unconfirmed (TESTING) image allowed to fall back to a
+# lower version.
+unit-update-ram-rollback-unconfirmed:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP \
+	-DWOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-ram-noramboot:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP -DWOLFBOOT_NO_RAMBOOT \
@@ -576,6 +583,13 @@ unit-update-ram-enc:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUT
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP -DMMU \
 	-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA -DHAVE_CHACHA \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-ram-enc-start:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP -DMMU \
+	-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA -DHAVE_CHACHA \
+	-DWOLFBOOT_DTS_BOOT_ADDRESS=0xCF000000 \
+	-DWOLFBOOT_DTS_UPDATE_ADDRESS=0xCF100000 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 # Same source as unit-update-ram-enc, but with a WOLFBOOT_RAMBOOT_MAX_SIZE that
 # is tighter than the partition cap (NO_PARTITIONS / RAM-load-region flavour),
@@ -1433,6 +1447,20 @@ unit-update-flash-enc: ../../include/target.h unit-update-flash.c
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c \
 	$(CFLAGS) $(LDFLAGS)
 
+# unit-update-flash-enc with the encrypt staging buffer supplied by
+# WOLFBOOT_ENCRYPT_CACHE instead of the stack.
+unit-update-flash-enc-cache:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DPART_SWAP_EXT -DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA -DHAVE_CHACHA \
+	-DCUSTOM_ENCRYPT_KEY -DUNIT_TEST_FALLBACK_ONLY \
+	-DWOLFBOOT_ENCRYPT_CACHE=unit_encrypt_cache \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-flash-enc-cache: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c \
+	$(CFLAGS) $(LDFLAGS)
+
 # Same encrypted target without UNIT_TEST_FALLBACK_ONLY, so the full
 # end-to-end suite (forward updates, rollback, ...) runs against the
 # encrypted swap and its IV derivation.
@@ -1514,6 +1542,12 @@ unit-update-ram-enc: ../../include/target.h unit-update-ram-enc.c
 		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c \
 		$(CFLAGS) $(LDFLAGS)
 
+unit-update-ram-enc-start: ../../include/target.h unit-update-ram-enc-start.c
+	gcc -o $@ unit-update-ram-enc-start.c ../../src/image.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c \
+		$(CFLAGS) $(LDFLAGS)
+
 unit-update-ram-enc-nopart: ../../include/target.h unit-update-ram-enc.c
 	gcc -o $@ unit-update-ram-enc.c \
 		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
@@ -1525,6 +1559,9 @@ unit-update-ram-nofixed: ../../include/target.h unit-update-ram-nofixed.c
 
 unit-update-ram-nofixed-noramboot: ../../include/target.h unit-update-ram-nofixed-noramboot.c
 	gcc -o $@ unit-update-ram-nofixed-noramboot.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-ram-rollback-unconfirmed: ../../include/target.h unit-update-ram.c
+	gcc -o $@ unit-update-ram.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-ram-noramboot: ../../include/target.h unit-update-ram-noramboot.c
 	gcc -o $@ unit-update-ram-noramboot.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
@@ -1864,6 +1901,8 @@ unit-sama5d3-ext-read: unit-sama5d3-ext-read.c sama5d3_read_extract.h
 #   - VERSAL_QSPI_BASE rebased onto host memory (register offsets kept);
 #   - the real qspi_dma_wait() renamed to qspi_dma_wait_hw() so the test
 #     can provide a qspi_dma_wait() that performs the DMA move;
+#   - the real qspi_fifo_tx() renamed to qspi_fifo_tx_hw() so the test can
+#     record each write chunk with the GenFIFO entry that carries it;
 # The test is built with -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64
 # -DARCH_64BIT (the file is guarded by TARGET_versal, the QSPI section by
 # EXT_FLASH, and the architecture check / hal.h prototypes by the ARCH
@@ -1904,6 +1943,7 @@ versal_host.c: ../../hal/versal.c versal_host.h aarch64_arch_host.h
 	    -e 's/__asm__ volatile\("mrs %0, cntpct_el0" : "=r" \(cntpct\)\);/cntpct = ++versal_host_ticks;/' \
 	    -e 's/__asm__ volatile\("mrs %0, cntfrq_el0" : "=r" \(cntfrq\)\);/cntfrq = 1000000ULL;/' \
 	    -e 's/^static int qspi_dma_wait\(void\)$$/static int qspi_dma_wait_hw(void)/' \
+	    -e 's/^static int qspi_fifo_tx\(const uint8_t \*data, uint32_t len\)$$/static int qspi_fifo_tx_hw(const uint8_t *data, uint32_t len)/' \
 	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"\);[[:space:]]*//' \
 	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[[:space:]]*:[[:space:]]*:[^;]*\);[[:space:]]*//' $< > $@
 	test -s $@

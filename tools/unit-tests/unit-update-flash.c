@@ -37,7 +37,13 @@
 #include <limits.h>
 #include "user_settings.h"
 #include "wolfboot/wolfboot.h"
+#ifdef WOLFBOOT_ENCRYPT_CACHE
+extern uint8_t unit_encrypt_cache[];
+#endif
 #include "libwolfboot.c"
+#ifdef WOLFBOOT_ENCRYPT_CACHE
+uint8_t unit_encrypt_cache[NVM_CACHE_SIZE];
+#endif
 #ifdef DELTA_UPDATES
 #define wb_patch_init unit_test_wb_patch_init
 #define wb_patch unit_test_wb_patch

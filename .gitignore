@@ -187,6 +187,7 @@ tools/unit-tests/unit-spi-flash
 tools/unit-tests/unit-string
 tools/unit-tests/unit-update-flash
 tools/unit-tests/unit-update-flash-enc
+tools/unit-tests/unit-update-flash-enc-cache
 tools/unit-tests/unit-update-flash-db
 tools/unit-tests/unit-update-flash-flagshome
 tools/unit-tests/unit-update-flash-invert
@@ -280,6 +281,7 @@ tools/unit-tests/unit-imx-rt-cache-align
 tools/unit-tests/unit-update-disk-fit
 tools/unit-tests/unit-update-disk-oob
 tools/unit-tests/unit-update-ram-enc
+tools/unit-tests/unit-update-ram-enc-start
 tools/unit-tests/unit-update-ram-enc-nopart
 tools/unit-tests/unit-va416x0-fram
 tools/unit-tests/unit-wolfhsm_flash_hal
@@ -690,6 +692,7 @@ tools/unit-tests/unit-t10xx-flash-status
 tools/unit-tests/unit-ti-hercules-erase
 tools/unit-tests/unit-update-disk-fsp
 tools/unit-tests/unit-update-ram-custom-trailer
+tools/unit-tests/unit-update-ram-rollback-unconfirmed
 tools/unit-tests/unit-update-ram-nofixed-noramboot
 tools/unit-tests/unit-update-trigger-scrub
 tools/unit-tests/unit-x86-uart

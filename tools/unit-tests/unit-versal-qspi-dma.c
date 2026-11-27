@@ -77,6 +77,26 @@ static int qspi_dma_wait(void)
 
 /* The real HAL (identical to hal/versal.c apart from the transforms
  * documented above). */
+#define MAX_TX 8
+struct tx_chunk {
+    uint32_t entry;
+    uint32_t len;
+    const uint8_t *data;
+};
+static struct tx_chunk g_tx[MAX_TX];
+static int g_tx_n;
+
+static int qspi_fifo_tx(const uint8_t *data, uint32_t len)
+{
+    if (g_tx_n < MAX_TX) {
+        g_tx[g_tx_n].entry = GQSPI_GEN_FIFO;
+        g_tx[g_tx_n].len = len;
+        g_tx[g_tx_n].data = data;
+        g_tx_n++;
+    }
+    return 0;
+}
+
 #include "versal_host.c"
 
 static QspiDev_t g_dev;
@@ -95,6 +115,8 @@ static void setup(void)
 
     memset(g_moves, 0, sizeof(g_moves));
     g_moves_n = 0;
+    memset(g_tx, 0, sizeof(g_tx));
+    g_tx_n = 0;
 
     memset(&g_dev, 0, sizeof(g_dev));
     g_dev.bus = GQSPI_GEN_FIFO_BUS_LOW;
@@ -172,6 +194,55 @@ START_TEST(test_dma_unaligned_oversized)
 }
 END_TEST
 
+/* Single device: write data goes out in chunks of up to 255 bytes, the
+ * GenFIFO immediate length limit. */
+START_TEST(test_write_chunks_single)
+{
+    static uint8_t data[600];
+    static const uint8_t tx[4] = { 0x02, 0x00, 0x00, 0x00 };
+
+    ck_assert_int_eq(qspi_transfer(&g_dev, tx, sizeof(tx), NULL, 0, 0,
+        data, sizeof(data)), 0);
+
+    ck_assert_int_eq(g_tx_n, 3);
+    ck_assert_uint_eq(g_tx[0].len, 255);
+    ck_assert_uint_eq(g_tx[1].len, 255);
+    ck_assert_uint_eq(g_tx[2].len, 90);
+}
+END_TEST
+
+/* Dual parallel: bytes alternate between the two devices, so every chunk
+ * but the last must hold an even number of bytes or the next chunk resumes
+ * on the wrong device. */
+START_TEST(test_write_chunks_striped)
+{
+    static uint8_t data[600];
+    static const uint8_t tx[4] = { 0x02, 0x00, 0x00, 0x00 };
+    uint32_t total = 0;
+    int i;
+
+    g_dev.bus = GQSPI_GEN_FIFO_BUS_BOTH;
+    g_dev.cs = GQSPI_GEN_FIFO_CS_BOTH;
+    g_dev.stripe = GQSPI_GEN_FIFO_STRIPE;
+
+    ck_assert_int_eq(qspi_transfer(&g_dev, tx, sizeof(tx), NULL, 0, 0,
+        data, sizeof(data)), 0);
+
+    ck_assert_int_eq(g_tx_n, 3);
+    for (i = 0; i < g_tx_n; i++) {
+        ck_assert_ptr_eq(g_tx[i].data, data + total);
+        ck_assert_uint_eq(g_tx[i].entry & GQSPI_GEN_FIFO_IMM_MASK,
+            g_tx[i].len);
+        ck_assert(g_tx[i].entry & GQSPI_GEN_FIFO_STRIPE);
+        if (i < g_tx_n - 1)
+            ck_assert_uint_eq(g_tx[i].len % 2, 0);
+        total += g_tx[i].len;
+    }
+    ck_assert_uint_eq(g_tx[0].len, 254);
+    ck_assert_uint_eq(total, sizeof(data));
+}
+END_TEST
+
 Suite *versal_qspi_dma_suite(void)
 {
     Suite *s = suite_create("versal-qspi-dma");
@@ -181,6 +252,8 @@ Suite *versal_qspi_dma_suite(void)
     tcase_add_test(tc, test_dma_aligned_large);
     tcase_add_test(tc, test_dma_unaligned_small);
     tcase_add_test(tc, test_dma_unaligned_oversized);
+    tcase_add_test(tc, test_write_chunks_single);
+    tcase_add_test(tc, test_write_chunks_striped);
 
     suite_add_tcase(s, tc);
     return s;

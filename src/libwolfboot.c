@@ -1808,31 +1808,96 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
     }
 }
 
+/**
+ * @brief Trigger an update of the given partition.
+ *
+ * PART_UPDATE is the same as wolfBoot_update_trigger. A fixed-slot dual-boot
+ * application running from the update partition, which wrote the new image
+ * to the BOOT partition, passes PART_BOOT to set that partition to
+ * "IMG_STATE_UPDATING". PART_BOOT is not supported where the BOOT partition
+ * trailer holds other state (NVM_FLASH_WRITEONCE, NVM_FLASH_JOURNAL,
+ * FLAGS_HOME, or an encryption key kept in flash).
+ *
+ * @param part PART_BOOT or PART_UPDATE.
+ */
+void RAMFUNCTION wolfBoot_update_trigger_part(uint8_t part)
+{
+    if (part == PART_UPDATE) {
+        wolfBoot_update_trigger();
+    }
+#if !defined(NVM_FLASH_WRITEONCE) && !defined(NVM_FLASH_JOURNAL) && \
+    !defined(FLAGS_HOME) && (!defined(EXT_ENCRYPTED) || defined(MMU))
+    else if (part == PART_BOOT) {
+        uint8_t st = IMG_STATE_UPDATING;
+#ifndef CUSTOM_PARTITION_TRAILER
+        uintptr_t lastSector = ((PART_BOOT_ENDFLAGS - 1) /
+            WOLFBOOT_SECTOR_SIZE) * WOLFBOOT_SECTOR_SIZE;
+#endif
+
+        if (FLAGS_BOOT_EXT()) {
+            ext_flash_unlock();
+#ifndef CUSTOM_PARTITION_TRAILER
+            ext_flash_erase(lastSector, WOLFBOOT_SECTOR_SIZE);
+#endif
+            wolfBoot_set_partition_state(PART_BOOT, st);
+            ext_flash_lock();
+        } else {
+            hal_flash_unlock();
+#ifndef CUSTOM_PARTITION_TRAILER
+            hal_flash_erase(lastSector, WOLFBOOT_SECTOR_SIZE);
+#endif
+            wolfBoot_set_partition_state(PART_BOOT, st);
+            hal_flash_lock();
+        }
+    }
+#endif
+}
+
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
+
+/**
+ * @brief Success function for a given partition.
+ *
+ * This function updates the state of the BOOT or UPDATE partition to
+ * "IMG_STATE_SUCCESS", using the flash unlock and lock functions that match
+ * where that partition lives. A dual-boot image running from the update
+ * partition confirms itself with PART_UPDATE. If the EXT_ENCRYPTED macro is
+ * defined, it calls wolfBoot_erase_encrypt_key function, unless the
+ * partitions stay encrypted in flash (WOLFBOOT_RAM_DECRYPT_EXT) and the key
+ * is needed on every boot.
+ *
+ * @param part PART_BOOT or PART_UPDATE.
+ */
+void RAMFUNCTION wolfBoot_success_part(uint8_t part)
+{
+    uint8_t st = IMG_STATE_SUCCESS;
+
+    if ((part != PART_BOOT) && (part != PART_UPDATE))
+        return;
+    if (((part == PART_BOOT) && FLAGS_BOOT_EXT()) ||
+            ((part == PART_UPDATE) && FLAGS_UPDATE_EXT())) {
+        ext_flash_unlock();
+        wolfBoot_set_partition_state(part, st);
+        ext_flash_lock();
+    } else {
+        hal_flash_unlock();
+        wolfBoot_set_partition_state(part, st);
+        hal_flash_lock();
+    }
+#if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_RAM_DECRYPT_EXT)
+    wolfBoot_erase_encrypt_key();
+#endif
+}
 
 /**
  * @brief Success function.
  *
  * This function updates the boot partition state to "IMG_STATE_SUCCESS".
- * If the FLAGS_BOOT_EXT macro is defined, it calls the appropriate flash unlock
- * and lock functions before updating the partition state. If the EXT_ENCRYPTED
- * macro is defined, it calls wolfBoot_erase_encrypt_key function.
+ * See wolfBoot_success_part.
  */
 void RAMFUNCTION wolfBoot_success(void)
 {
-    uint8_t st = IMG_STATE_SUCCESS;
-    if (FLAGS_BOOT_EXT()) {
-        ext_flash_unlock();
-        wolfBoot_set_partition_state(PART_BOOT, st);
-        ext_flash_lock();
-    } else {
-        hal_flash_unlock();
-        wolfBoot_set_partition_state(PART_BOOT, st);
-        hal_flash_lock();
-    }
-#ifdef EXT_ENCRYPTED
-    wolfBoot_erase_encrypt_key();
-#endif
+    wolfBoot_success_part(PART_BOOT);
 }
 #ifdef __CCRX__
 #pragma section
@@ -2386,7 +2451,15 @@ int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
 #endif
 
 
-#if defined(EXT_ENCRYPTED) && defined(MMU)
+/* Reading a field of an encrypted header means decrypting it first, which
+ * only the bootloader can do: an application linking this file has neither
+ * the cipher state nor the key. */
+#if defined(EXT_ENCRYPTED) && defined(MMU) && \
+    (defined(__WOLFBOOT) || defined(UNIT_TEST))
+#define WOLFBOOT_DECRYPT_HDR
+#endif
+
+#ifdef WOLFBOOT_DECRYPT_HDR
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
 extern uint8_t _end[];  /* linker symbol: end of wolfBoot BSS */
 #endif
@@ -2437,7 +2510,7 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     uint32_t version = 0;
     if (blob == NULL)
         return 0;
-#if defined(EXT_ENCRYPTED) && defined(MMU)
+#ifdef WOLFBOOT_DECRYPT_HDR
     if (wolfBoot_initialize_encryption() < 0)
         return 0;
     decrypt_header(blob);
@@ -2448,7 +2521,7 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_VERSION,
             (void *)&version_field) == WOLFBOOT_HDR_U32_SZ && version_field)
         version = im2n(WOLFBOOT_HDR_GET_U32(version_field));
-#if defined(EXT_ENCRYPTED) && defined(MMU)
+#ifdef WOLFBOOT_DECRYPT_HDR
     dec_hdr_clear();
 #endif
     return version;
@@ -2470,7 +2543,7 @@ uint16_t wolfBoot_get_blob_type(uint8_t *blob)
     uint16_t *volatile type_field = NULL;
     uint8_t *img_bin = blob;
     uint16_t type = 0;
-#if defined(EXT_ENCRYPTED) && defined(MMU)
+#ifdef WOLFBOOT_DECRYPT_HDR
     if (wolfBoot_initialize_encryption() < 0)
         return 0;
     decrypt_header(blob);
@@ -2481,7 +2554,7 @@ uint16_t wolfBoot_get_blob_type(uint8_t *blob)
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE,
             (void *)&type_field) == WOLFBOOT_HDR_U16_SZ && type_field)
         type = im2ns(WOLFBOOT_HDR_GET_U16(type_field));
-#if defined(EXT_ENCRYPTED) && defined(MMU)
+#ifdef WOLFBOOT_DECRYPT_HDR
     dec_hdr_clear();
 #endif
     return type;
@@ -2507,7 +2580,7 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
     uint32_t delta_base_ver = 0;
-#if defined(EXT_ENCRYPTED) && defined(MMU)
+#ifdef WOLFBOOT_DECRYPT_HDR
     if (wolfBoot_initialize_encryption() < 0)
         return 0;
     decrypt_header(blob);
@@ -2519,7 +2592,7 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_DELTA_BASE,
             (void *)&delta_base) == sizeof(uint32_t) && delta_base)
         delta_base_ver = im2n(*delta_base);
-#if defined(EXT_ENCRYPTED) && defined(MMU)
+#ifdef WOLFBOOT_DECRYPT_HDR
     dec_hdr_clear();
 #endif
     return delta_base_ver;
@@ -2702,12 +2775,30 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
  * Returns -1 if no valid candidate is found.
  *
  */
+#ifdef WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED
+/* Unconfirmed slot passed over by wolfBoot_dualboot_candidate(), or -1. */
+static int dualboot_rejected = -1;
+
+/* Erase the passed-over slot. The loader calls this once the image it boots
+ * instead has been verified, so a bad fallback never costs the only other
+ * image. */
+void wolfBoot_dualboot_erase_rejected(int active)
+{
+    if ((dualboot_rejected >= 0) && (dualboot_rejected != active))
+        wolfBoot_erase_partition((uint8_t)dualboot_rejected);
+    dualboot_rejected = -1;
+}
+#endif
+
 int wolfBoot_dualboot_candidate(void)
 {
     int candidate = PART_BOOT;
     int fallback_possible = 0;
     uint32_t boot_v, update_v;
     uint8_t p_state;
+#ifdef WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED
+    dualboot_rejected = -1;
+#endif
     /* Find the candidate */
     boot_v = wolfBoot_current_firmware_version();
     update_v = wolfBoot_update_firmware_version();
@@ -2732,7 +2823,8 @@ int wolfBoot_dualboot_candidate(void)
             (wolfBoot_get_partition_state(candidate, &p_state) == 0) &&
             (p_state == IMG_STATE_TESTING))
     {
-#ifndef ALLOW_DOWNGRADE
+#if !defined(ALLOW_DOWNGRADE) && \
+    !defined(WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED)
         uint32_t candidate_v = (candidate == PART_BOOT) ? boot_v : update_v;
         uint32_t fallback_v = (candidate == PART_BOOT) ? update_v : boot_v;
 
@@ -2741,7 +2833,11 @@ int wolfBoot_dualboot_candidate(void)
             return candidate;
         }
 #endif
+#ifdef WOLFBOOT_DUALBOOT_ROLLBACK_UNCONFIRMED
+        dualboot_rejected = candidate;
+#else
         wolfBoot_erase_partition(candidate);
+#endif
         candidate ^= 1; /* switch to other partition if available */
     }
     return candidate;
@@ -2830,7 +2926,7 @@ int wolfBoot_fallback_is_possible(void)
         #endif
     #endif
 #else
-    #define ENCRYPT_CACHE (WOLFBOOT_ENCRYPT_CACHE)
+    #define ENCRYPT_CACHE ((uint8_t *)(uintptr_t)(WOLFBOOT_ENCRYPT_CACHE))
 #endif
 
 #if defined(EXT_ENCRYPTED) && defined(MMU) && !defined(CUSTOM_ENCRYPT_KEY)
@@ -3672,7 +3768,7 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
      * or they would re-anchor the stream at the standard-IV position. */
     uint32_t iv_offset_at_entry = 0;
 #if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_SMALL_STACK) && \
-    !defined(NVM_FLASH_WRITEONCE)
+    !defined(NVM_FLASH_WRITEONCE) && !defined(WOLFBOOT_ENCRYPT_CACHE)
     uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
 #endif
 
@@ -3917,7 +4013,7 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
 #endif /* EXT_FLASH */
 #endif /* __WOLFBOOT */
 
-#if defined(MMU)
+#ifdef WOLFBOOT_DECRYPT_HDR
 /* The decrypt loop in wolfBoot_ram_decrypt() copies in ENCRYPT_BLOCK_SIZE
  * granules, rounding the final write up to a block boundary. The size bound is
  * only safe if the RAM load region is itself block-aligned; assert that where
@@ -3947,6 +4043,9 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     uint8_t *row_address = src;
     uint32_t dst_offset = 0, iv_counter = 0;
     uint32_t len;
+#ifdef WOLFBOOT_RAM_DECRYPT_EXT
+    uint32_t stage_len;
+#endif
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
     uintptr_t wb_hi  = (uintptr_t)_end;
     uintptr_t img_lo = (uintptr_t)dst;
@@ -3970,8 +4069,27 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
         }
     }
 
+#ifdef WOLFBOOT_RAM_DECRYPT_EXT
+    /* The flash is not memory mapped: stage the ciphertext at the load
+     * address and decrypt it in place. */
+#if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
+    if (ramboot_region_overlap(img_lo, img_lo + IMAGE_HEADER_SIZE, wb_lo,
+            wb_hi)) {
+        wolfBoot_printf("Error: image header at %p overlaps wolfBoot\n",
+            (void*)img_lo);
+        return -1;
+    }
+#endif
+    if (ext_flash_read((uintptr_t)src, dst, IMAGE_HEADER_SIZE) !=
+            IMAGE_HEADER_SIZE) {
+        wolfBoot_printf("Error reading header at %p!\n", src);
+        return -1;
+    }
+    row_address = dst;
+#endif
+
     /* Attempt to decrypt firmware header */
-    if (decrypt_header(src) != 0) {
+    if (decrypt_header(row_address) != 0) {
         wolfBoot_printf("Error decrypting header at %p!\n", src);
         return -1;
     }
@@ -4024,6 +4142,14 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
         return -1;
     }
 #endif
+#ifdef WOLFBOOT_RAM_DECRYPT_EXT
+    stage_len = (len + ENCRYPT_BLOCK_SIZE - 1) & ~(ENCRYPT_BLOCK_SIZE - 1);
+    if (ext_flash_read((uintptr_t)src + IMAGE_HEADER_SIZE,
+            dst + IMAGE_HEADER_SIZE, (int)stage_len) != (int)stage_len) {
+        wolfBoot_printf("Error reading image at %p!\n", src);
+        return -1;
+    }
+#endif
     while (dst_offset < (len + IMAGE_HEADER_SIZE)) {
         wolfBoot_crypto_set_iv(encrypt_iv_nonce, iv_counter);
         crypto_decrypt(dec_block, row_address, ENCRYPT_BLOCK_SIZE);
@@ -4034,7 +4160,7 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     }
     return 0;
 }
-#endif /* MMU */
+#endif /* WOLFBOOT_DECRYPT_HDR */
 #endif /* EXT_ENCRYPTED */
 
 /* A secure application without wolfCrypt TZ is entered Secure and exports no
