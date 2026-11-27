@@ -131,7 +131,7 @@ IV:
     .align 2
     j trap_empty
     .align 2
-    j trap_empty
+    j _mtimer
     .align 2
     j trap_empty
     .align 2
@@ -185,6 +185,11 @@ IV:
 _synctrap:
   trap_entry
   jal isr_synctrap
+  trap_exit
+
+_mtimer:
+  trap_entry
+  jal isr_mtimer
   trap_exit
 
 trap_empty:

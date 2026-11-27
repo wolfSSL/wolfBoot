@@ -2232,6 +2232,8 @@ ifeq ($(MPFS_ATHENA),1)
   # AES-256 ENCRYPT build.
   CFLAGS += -DMPFS_ATHENA -I$(MPFS_ATHENA_CAL_DIR)
   CFLAGS += -DWOLFSSL_MICROCHIP_MPFS -DWOLFSSL_MPFS_ATHENA
+  # The port's known-answer self-test is opt-in; the HAL's boot check runs it.
+  CFLAGS += -DWC_MPFS_ATHENA_SELFTEST
   # Matches the port's own WC_MPFS_ATHENA_DEVID default; wolfBoot tags its
   # cipher contexts with this one.
   CFLAGS += -DWOLFBOOT_DEVID_CRYPT=0xA7
@@ -2685,12 +2687,17 @@ AUX_WOLFCRYPT_OBJS_NEW:=$(filter-out $(WOLFCRYPT_OBJS),$(sort $(AUX_WOLFCRYPT_OB
 WOLFCRYPT_OBJS+=$(AUX_WOLFCRYPT_OBJS_NEW)
 
 # Under WOLFSSL_ARMASM, chacha.c defers the block function to
-# wc_chacha_crypt_bytes(), which lives in the port. arch.mk adds the aes/sha
-# equivalents unconditionally; ChaCha is only selected here, so add it last.
+# wc_chacha_crypt_bytes(), and wc_mldsa.c its NTT and coding routines to
+# *_neon(), all of which live in the port. arch.mk adds the aes/sha
+# equivalents unconditionally; ChaCha and ML-DSA are only selected here, so
+# add them last.
 ifeq ($(ARCH),AARCH64)
   ifneq ($(NO_ARM_ASM),1)
     ifneq (,$(filter %/wolfcrypt/src/chacha.o,$(WOLFCRYPT_OBJS)))
       WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-chacha-asm_c.o
+    endif
+    ifneq (,$(filter %/wolfcrypt/src/wc_mldsa.o,$(WOLFCRYPT_OBJS)))
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-mldsa-asm_c.o
     endif
   endif
 endif

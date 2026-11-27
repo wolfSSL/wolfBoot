@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include "hal/riscv.h"
+#include "printf.h"
 
 extern void trap_entry(void);
 extern void trap_exit(void);
@@ -77,15 +78,35 @@ void do_boot(const uint32_t *app_offset)
 }
 
 static uint32_t synctrap_cause = 0;
+#ifdef WOLFBOOT_RISCV_MMODE
+/* The vector saved the caller's registers, so this can be plain C. Report the
+ * fault and stop rather than resume at the faulting instruction, which would
+ * trap again for ever with nothing on the console. Hardware clears mstatus.MIE
+ * on trap entry, so the timer interrupt that pets the MSS watchdogs cannot run
+ * here and they reset the board a few seconds after the message. */
+void isr_synctrap(void)
+{
+    unsigned long cause, epc, tval;
+    asm volatile("csrr %0, mcause" : "=r"(cause));
+    asm volatile("csrr %0, mepc" : "=r"(epc));
+    asm volatile("csrr %0, mtval" : "=r"(tval));
+    synctrap_cause = (uint32_t)cause;
+    wolfBoot_printf("TRAP: cause=%lx epc=%lx tval=%lx\r\n", cause, epc, tval);
+    while (1) {
+        /* halt */
+    }
+}
+#else
 void __attribute__((naked)) isr_synctrap(void)
 {
-#ifdef WOLFBOOT_RISCV_MMODE
-    asm volatile("csrr %0, mcause" : "=r"(synctrap_cause));
-    asm volatile("mret");
-#else
     asm volatile("csrr %0, scause" : "=r"(synctrap_cause));
     asm volatile("sret");
+}
 #endif
+
+/* Machine timer interrupt; a target that uses it defines its own. */
+void __attribute__((weak)) isr_mtimer(void)
+{
 }
 
 void isr_empty(void)
