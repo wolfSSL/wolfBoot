@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 #include "hal.h"
+#include "uart_drv.h"
 #include "wolfboot/wolfboot.h"
 #include "wolfHAL_board.h"
 
@@ -49,6 +50,31 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     return whal_Flash_Erase(BOARD_FLASH_DEV, (size_t)address, (size_t)len);
 }
+
+#ifdef UART_FLASH
+int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
+{
+    (void)bitrate;
+    (void)data;
+    (void)parity;
+    (void)stop;
+    return 0;
+}
+
+int uart_tx(const uint8_t c)
+{
+    if (whal_Uart_Send(BOARD_UART_FLASH_DEV, &c, 1) != WHAL_SUCCESS)
+        return -1;
+    return 1;
+}
+
+int uart_rx(uint8_t *c)
+{
+    if (whal_Uart_Recv(BOARD_UART_FLASH_DEV, c, 1) != WHAL_SUCCESS)
+        return 0;
+    return 1;
+}
+#endif
 
 #ifdef DEBUG_UART
 void uart_write(const char *buf, unsigned int len)

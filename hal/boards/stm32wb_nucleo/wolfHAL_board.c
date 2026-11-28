@@ -29,12 +29,29 @@
 #include "hal.h"
 #include "wolfHAL_board.h"
 
-#ifdef DEBUG_UART
+#if defined(DEBUG_UART) || defined(UART_FLASH)
 static const whal_Stm32wb_Rcc_PeriphClk g_periphClks[] = {
     {WHAL_STM32WB55_GPIOB_GATE},
     {WHAL_STM32WB55_UART1_GATE},
 };
 #define PERIPH_CLK_COUNT (sizeof(g_periphClks) / sizeof(g_periphClks[0]))
+#endif
+
+#ifdef UART_FLASH
+#define UART_FLASH_TIMEOUT_POLLS 500000
+
+static uint32_t g_pollCount;
+
+/* One tick per register poll, so timeoutTicks counts polls. */
+static uint32_t board_poll_tick(void)
+{
+    return ++g_pollCount;
+}
+
+whal_Timeout g_wbUartTimeout = {
+    .timeoutTicks = UART_FLASH_TIMEOUT_POLLS,
+    .GetTick = board_poll_tick,
+};
 #endif
 
 /* MSI 4 MHz -> PLL VCO 128 MHz -> PLLR /2 = 64 MHz -> SYSCLK */
@@ -60,7 +77,7 @@ void hal_init(void)
     pll_clock_on();
     whal_Flash_Init(BOARD_FLASH_DEV);
 
-#ifdef DEBUG_UART
+#if defined(DEBUG_UART) || defined(UART_FLASH)
     for (size_t i = 0; i < PERIPH_CLK_COUNT; i++) {
         whal_Stm32wb_Rcc_EnablePeriphClk(&g_periphClks[i]);
     }
@@ -72,7 +89,7 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-#ifdef DEBUG_UART
+#if defined(DEBUG_UART) || defined(UART_FLASH)
     whal_Uart_Deinit(BOARD_UART_DEV);
     whal_Gpio_Deinit(BOARD_GPIO_DEV);
 

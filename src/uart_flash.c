@@ -50,11 +50,20 @@ int uart_rx(uint8_t *c);
 static int wait_ack_cycles(int cycles)
 {
     uint8_t c;
+
+#ifdef WOLFHAL
+    (void)cycles;
+    if ((uart_rx(&c) == 1) && (c == CMD_ACK))
+        return 0;
+
+#else
     volatile int count = 0;
     while(++count < cycles) {
         if ((uart_rx(&c) == 1) && (c == CMD_ACK))
             return 0;
     }
+#endif
+
     return -1;
 }
 
@@ -122,8 +131,13 @@ int  ext_flash_read(uintptr_t address, uint8_t *data, int len)
             return -1;
     }
     for (i = 0; i < len; i++) {
+#ifdef WOLFHAL
+        if (uart_rx(&data[i]) != 1)
+            return -1;
+#else
         if (uart_rx_timeout(&data[i]) != 0)
             return -1;
+#endif
         uart_tx(CMD_ACK);
     }
     return i;
@@ -149,8 +163,13 @@ int  ext_flash_erase(uintptr_t address, int len)
             return -1;
     }
     /* Wait for extra ack at the end of Erase */
+#ifdef WOLFHAL
+    if (wait_ack() == 0)
+        return 0;
+#else
     if (wait_ack_cycles(WAIT_CYCLES * ERASE_TIMEOUT) == 0)
         return 0;
+#endif
     return -1;
 }
 

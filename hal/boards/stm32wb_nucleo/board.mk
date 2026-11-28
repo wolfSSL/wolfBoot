@@ -1,7 +1,9 @@
 ARCH_FLASH_OFFSET=0x08000000
 $(call LSCRIPT_IN_DEFAULT,hal/stm32wb.ld)
 
-CFLAGS+=-DWHAL_CFG_NO_TIMEOUT
+ifneq ($(UART_FLASH),1)
+  CFLAGS+=-DWHAL_CFG_NO_TIMEOUT
+endif
 
 # Upstream wolfHAL drivers from lib/wolfHAL/src/. wolfBoot's hal_flash_*
 # contract is satisfied by hal/wolfhal.c (added automatically because
@@ -16,7 +18,7 @@ CFLAGS+=-DWHAL_CFG_STM32WB_UART_SINGLE_INSTANCE
 
 WOLFHAL_OBJS+=$(WOLFHAL_ROOT)/src/reg.o
 WOLFHAL_OBJS+=$(WOLFHAL_ROOT)/src/flash/stm32wb_flash.o
-ifeq ($(DEBUG_UART),1)
+ifneq (,$(filter 1,$(DEBUG_UART) $(UART_FLASH)))
   WOLFHAL_OBJS+=$(WOLFHAL_ROOT)/src/gpio/stm32wb_gpio.o
   WOLFHAL_OBJS+=$(WOLFHAL_ROOT)/src/uart/stm32wb_uart.o
 endif

@@ -259,14 +259,14 @@ ifeq ($(WOLFHAL),1)
   ifeq ($(strip $(BOARD)),)
     $(error WOLFHAL=1 requires BOARD to be set, e.g. BOARD=stm32wb_nucleo)
   endif
-  ifeq ($(wildcard hal/boards/$(BOARD)/board.mk),)
-    $(error BOARD=$(BOARD) has no hal/boards/$(BOARD)/board.mk)
+  ifeq ($(wildcard $(BOARD_DIR)/board.mk),)
+    $(error BOARD=$(BOARD) has no $(BOARD_DIR)/board.mk)
   endif
   # wolfHAL backend: hal/wolfhal.o replaces hal/$(TARGET).o above. The
   # board's wolfHAL_board.c provides hal_init/hal_prepare_boot and the wolfHAL
   # device handles; board.mk pulls in chip drivers.
-  OBJS+=./hal/boards/$(BOARD)/wolfHAL_board.o
-  include hal/boards/$(BOARD)/board.mk
+  OBJS+=$(BOARD_DIR)/wolfHAL_board.o
+  include $(BOARD_DIR)/board.mk
 endif
 
 # Set only here, so that host-tool sub-makes which also include options.mk

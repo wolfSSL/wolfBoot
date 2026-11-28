@@ -56,7 +56,15 @@ extern const whal_Uart  whal_Stm32wb_Uart_Dev;
  * without API churn. */
 #define BOARD_GPIO_DEV   WHAL_INTERNAL_DEV
 #define BOARD_UART_DEV   WHAL_INTERNAL_DEV
+#define BOARD_UART_FLASH_DEV BOARD_UART_DEV
 #define BOARD_FLASH_DEV  WHAL_INTERNAL_DEV
+
+#ifdef UART_FLASH
+extern whal_Timeout g_wbUartTimeout;
+#define BOARD_UART_TIMEOUT (&g_wbUartTimeout)
+#else
+#define BOARD_UART_TIMEOUT NULL
+#endif
 
 /* GPIO singleton initializer — instantiated by stm32wb_gpio.c. */
 #define WHAL_CFG_STM32WB_GPIO_DEV { \
@@ -95,6 +103,7 @@ extern const whal_Uart  whal_Stm32wb_Uart_Dev;
     .base = WHAL_STM32WB55_UART1_BASE, \
     .cfg = (void *)&(const whal_Stm32wb_Uart_Cfg){ \
         .brr = WHAL_STM32WB_UART_BRR(64000000, 115200), \
+        .timeout = BOARD_UART_TIMEOUT, \
     }, \
 }
 
