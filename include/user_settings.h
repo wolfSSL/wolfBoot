@@ -107,7 +107,7 @@
      * seed is a HAL hook: every FIPS target implements
      *   int wolfBoot_fips_seed(unsigned char* output, unsigned int sz);
      * (e.g. /dev/urandom on sim in hal/sim.c, the BCM2711 RNG200 TRNG on CM4 in
-     * hal/cm4.c). A new FIPS target just provides this function in its HAL - no
+     * the HAL). A new FIPS target just provides this function in its HAL - no
      * wolfCrypt settings edit needed (a missing implementation is a clear link
      * error). Allow a target to pre-define CUSTOM_RAND_GENERATE_SEED to opt out. */
     #ifndef CUSTOM_RAND_GENERATE_SEED

@@ -54,6 +54,10 @@
 #include "hal/cm4.h"
 #endif
 
+#ifdef TARGET_cm5
+#include "hal/cm5.h"
+#endif
+
 #ifdef TARGET_imx8qm
 #include "hal/imx8qm.h"
 #endif
@@ -1275,7 +1279,7 @@ FPUStatus:
 
 .global _vector_table
 _vector_table:
-#if defined(TARGET_cm4)
+#if defined(TARGET_cm4) || defined(TARGET_cm5)
    /* ARM64 Linux kernel image header (Documentation/arm64/booting.rst). The RPi
     * VideoCore firmware (start4.elf) only enters a 64-bit kernel that carries
     * this header (branch at off 0, "ARM\x64" magic at off 56); it then runs the
@@ -1298,7 +1302,7 @@ _cm4_entry:
 #endif
    mov x21, x0        // read ATAG/FDT address
 
-#if defined(TARGET_cm4)
+#if defined(TARGET_cm4) || defined(TARGET_cm5)
    /* Load-address self-check: wolfBoot is linked absolutely at 0x200000 and is
     * NOT position independent (the ldr =_vector_table below loads the absolute
     * stack top). Compare the runtime address (PC-relative adr) with the linked
@@ -1321,7 +1325,7 @@ _cm4_entry:
    mrs x3, mpidr_el1
    and x3, x3, #3
    cbnz x3, 9f
-   ldr x2, =cm4_fw_dtb
+   ldr x2, =rpi_fw_dtb
    str x21, [x2]
 9:
 #endif
@@ -1380,7 +1384,7 @@ _cm4_entry:
     // EL == 2?
     mov x2, #3 << 20
     msr cptr_el2, x2           /* Enable FP/SIMD */
-#if defined(TARGET_cm4) || defined(TARGET_imx8qm) || \
+#if defined(TARGET_cm4) || defined(TARGET_cm5) || defined(TARGET_imx8qm) || \
     (defined(TARGET_imx8mm) && defined(IMX8MM_BL33))
     /* Always install a valid EL2 vector base: the reset VBAR_EL2 is UNKNOWN, so
      * without this a fault in the parsing-heavy boot code branches to an
@@ -1465,7 +1469,7 @@ _cm4_entry:
     bl boot_entry_C   // boot_entry_C never returns
     b   7b            // go to sleep anyhow in case.
 
-#if defined(TARGET_cm4) || defined(TARGET_imx8qm) || \
+#if defined(TARGET_cm4) || defined(TARGET_cm5) || defined(TARGET_imx8qm) || \
     (defined(TARGET_imx8mm) && defined(IMX8MM_BL33))
 /* Minimal always-on EL2 exception vectors. On any exception (data/instruction
  * abort, etc.) halt cleanly rather than branch to the UNKNOWN reset VBAR_EL2.
@@ -1525,7 +1529,7 @@ simple_el2_fault_stack:
 simple_el2_fault_stack_top:
 .section ".boot"
 #endif
-#endif /* TARGET_cm4 || TARGET_imx8qm || (TARGET_imx8mm && IMX8MM_BL33) */
+#endif /* TARGET_cm4 || TARGET_cm5 || TARGET_imx8qm || (TARGET_imx8mm && IMX8MM_BL33) */
 
 #if defined(TARGET_s32g2)
 /* EL3 exception vectors: wolfBoot is entered by the Boot ROM at EL3 with no
@@ -1708,17 +1712,17 @@ s32g2_el3_to_el2_boot:
    mov  x0, x21
    b    s32g2_enter_el2
 #endif /* TARGET_s32g2 */
-#if defined(TARGET_cm4)
+#if defined(TARGET_cm4) || defined(TARGET_cm5)
 /* Firmware-provided DTB pointer, stored at _cm4_entry. Read by hal_get_boot_dts()
- * (hal/cm4.c) for the kernel-only FIT boot path. In .data so it is not subject to
+ * (hal/rpi_common.c) for the kernel-only FIT boot path. In .data so it is not subject to
  * BSS clearing; the runtime store at entry sets the value regardless of load. */
 .section ".data"
 .balign 8
-.global cm4_fw_dtb
-cm4_fw_dtb:
+.global rpi_fw_dtb
+rpi_fw_dtb:
     .quad 0
 .section ".boot"
-#endif /* TARGET_cm4 */
+#endif /* TARGET_cm4 || TARGET_cm5 */
 #if 0
 .section ".boot"
 .global _vector_table

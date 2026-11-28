@@ -40,7 +40,7 @@ Production use requires the licensed, validated FIPS bundle. Unpack it and point
 The `FIPS=1` build option (`options.mk`) rebuilds the wolfcrypt object list as the validated module boundary in link order (`wolfcrypt_first.o` first, `wolfcrypt_last.o` last, with `fips.o`/`fips_test.o` and the boundary crypto between them - the in-core integrity hash on GCC/ELF is enforced by this link order). Point the build at the FIPS tree and select an approved algorithm pair:
 
 ```
-cp config/examples/sim-fips.config .config    # or config/examples/cm4.config
+cp config/examples/sim-fips.config .config    # or cm4.config / cm5.config
 make FIPS=1 WOLFBOOT_LIB_WOLFSSL=/path/to/wolfssl-5.9.2-gplv3-fips-ready \
      SIGN=ECC384 HASH=SHA384 SPMATH=1
 ```
@@ -49,7 +49,7 @@ make FIPS=1 WOLFBOOT_LIB_WOLFSSL=/path/to/wolfssl-5.9.2-gplv3-fips-ready \
 
 ## Entropy source (required)
 
-The FIPS DRBG needs a seed. wolfBoot's lean configuration compiles out the OS seed paths, so a seed is provided via `CUSTOM_RAND_GENERATE_SEED` (the `HAVE_FIPS` block in `include/user_settings.h` keeps the RNG enabled by undoing wolfBoot's `WC_NO_RNG`/`WC_NO_HASHDRBG`). The example wiring points it at `wolfBoot_fips_seed()`, implemented per target: `/dev/urandom` on the simulator (`hal/sim.c`) and the BCM2711 RNG200 hardware TRNG on the CM4 (`hal/cm4.c`). Without a working seed, the ECDSA power-on self-test (which performs a sign) fails with `ECDSA_KAT_FIPS_E` because `wc_GenerateSeed()` returns `NOT_COMPILED_IN`.
+The FIPS DRBG needs a seed. wolfBoot's lean configuration compiles out the OS seed paths, so a seed is provided via `CUSTOM_RAND_GENERATE_SEED` (the `HAVE_FIPS` block in `include/user_settings.h` keeps the RNG enabled by undoing wolfBoot's `WC_NO_RNG`/`WC_NO_HASHDRBG`). The example wiring points it at `wolfBoot_fips_seed()`, implemented per target: `/dev/urandom` on the simulator (`hal/sim.c`) and the BCM2711 RNG200 hardware TRNG on the CM4 (`hal/rpi_common.c`). Without a working seed, the ECDSA power-on self-test (which performs a sign) fails with `ECDSA_KAT_FIPS_E` because `wc_GenerateSeed()` returns `NOT_COMPILED_IN`.
 
 ## Sealing the in-core integrity hash
 
@@ -74,7 +74,7 @@ The FIPS module targets a hosted environment; a few things must be provided on b
 
 - **POST entry.** The module registers its POST via a C constructor (`.init_array`), which a hosted runtime runs before `main()`. wolfBoot's bare-metal startup does not run `.init_array`, so build with `NO_ATTRIBUTE_CONSTRUCTOR` and call `fipsEntry()` explicitly (`src/loader.c`).
 - **Normal (cacheable) memory.** wolfBoot's simple startup runs with the MMU off, where all memory is Device-nGnRnE and unaligned / 128-bit SIMD accesses fault (the FIPS module and newlib `printf`/`snprintf` do both). The CM4 HAL enables a minimal identity MMU with DDR mapped Normal cacheable before the POST (`cm4_mmu_enable`), and tears it down (clean D-cache, disable MMU/caches) before the boot handoff (`cm4_mmu_disable`) so the loaded image is coherent and the application starts MMU-off.
-- **libc.** The module uses malloc/printf; stub the newlib syscalls (`--specs=nosys.specs`) and provide a bounded `_sbrk` so the heap cannot grow into the unverified image (the CM4 HAL allocates from a fixed static buffer in `hal/cm4.c`).
+- **libc.** The module uses malloc/printf; stub the newlib syscalls (`--specs=nosys.specs`) and provide a bounded `_sbrk` so the heap cannot grow into the unverified image (the CM4 HAL allocates from a fixed static buffer in `hal/rpi_common.c`).
 
 Bring the module up on the simulator (`config/examples/sim-fips.config`) first - it exercises the whole flow (module boundary, POST, in-core seal, verify, A/B update) with no hardware.
 
@@ -87,3 +87,4 @@ Bring the module up on the simulator (`config/examples/sim-fips.config`) first -
 ## See also
 
 - [Targets.md](Targets.md) - Raspberry Pi Compute Module 4 (BCM2711) target. FIPS 140-3 authenticated boot (module operational -> SHA-384 integrity -> ECDSA-P384 verify seeded by the BCM2711 hardware TRNG -> handoff) is validated on CM4 hardware.
+- [Targets.md](Targets.md) - Raspberry Pi Compute Module 5 (BCM2712) target. The same FIPS 140-3 authenticated boot is validated on CM5 hardware, seeded by the BCM2712 RNG200.

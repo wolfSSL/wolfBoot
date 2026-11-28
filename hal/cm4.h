@@ -46,43 +46,62 @@
 #endif
 #define BCM2711_RNG_BASE        (BCM2711_MMIO_BASE + 0x104000) /* RNG200 TRNG */
 
-/* RNG200 (iproc-rng200) register offsets */
-#define RNG200_CTRL             0x00  /* bit0 RBGEN = enable */
-#define RNG200_SOFT_RESET       0x04
-#define RNG200_RBG_SOFT_RESET   0x08
-#define RNG200_INT_STATUS       0x18
-#define RNG200_FIFO_DATA        0x20
-#define RNG200_FIFO_COUNT       0x24  /* [7:0] = words available */
-#define RNG200_CTRL_RBGEN       0x00000001
-
-/* SP800-90B health-test status bits in RNG200_INT_STATUS (iproc-rng200).
- * MASTER_FAIL_LOCKOUT latches when the continuous test trips repeatedly;
- * NIST_FAIL flags a startup/continuous health-test failure. Either means the
- * entropy source is degraded and must not seed the FIPS DRBG. */
-#define RNG200_INT_MASTER_FAIL_LOCKOUT     0x80000000
-#define RNG200_INT_STARTUP_TRANSITIONS_MET 0x00020000
-#define RNG200_INT_NIST_FAIL               0x00000020
-#define RNG200_INT_TOTAL_BITS_COUNT        0x00000001
-#define RNG200_INT_HEALTH_FAIL \
-    (RNG200_INT_MASTER_FAIL_LOCKOUT | RNG200_INT_NIST_FAIL)
-
 /* BCM2711 system counter frequency (fallback if CNTFRQ_EL0 reads 0) */
 #define BCM2711_TIMER_CLK_FREQ  54000000ULL
 
-/* SDHCI register offsets used by the EMMC2 glue. The generic SDHCI driver
- * addresses registers with Cadence-style SRS offsets (0x200 + std); the glue
- * translates to the standard Arasan layout below. Integers, assembler-safe. */
-#define CADENCE_SRS_OFFSET      0x200
-#define STD_SDHCI_SDMA_ADDR     0x00  /* SDMA System Address (32-bit) */
-#define STD_SDHCI_HOST_CTRL1    0x28
-#define STD_SDHCI_POWER_CTRL    0x29
-#define STD_SDHCI_BLKGAP_CTRL   0x2A
-#define STD_SDHCI_WAKEUP_CTRL   0x2B
-#define STD_SDHCI_CLK_CTRL      0x2C
-#define STD_SDHCI_TIMEOUT_CTRL  0x2E
-#define STD_SDHCI_SW_RESET      0x2F
-#define STD_SDHCI_HOST_CTRL2    0x3C
-#define STD_SDHCI_SRA           0x01  /* Software Reset for All */
+/* Names used by the code shared with the CM5 (hal/rpi_common.c) */
+#define RPI_TAG                 "cm4"
+#define RPI_BOARD               "CM4"
+#define RPI_SDHCI_BASE          BCM2711_EMMC2_BASE
+#define RPI_RNG_BASE            BCM2711_RNG_BASE
+#define RPI_TIMER_CLK_FREQ      BCM2711_TIMER_CLK_FREQ
+
+/* The cm4 build options keep their CM4_ names */
+#ifdef CM4_FIRMWARE_DTB
+#define RPI_FIRMWARE_DTB
+#endif
+#ifdef CM4_RAUC_AB
+#define RPI_RAUC_AB
+#endif
+#ifdef CM4_FDT_MAX_SIZE
+#define RPI_FDT_MAX_SIZE        CM4_FDT_MAX_SIZE
+#endif
+#ifdef CM4_FIPS_HEAP_SIZE
+#define RPI_FIPS_HEAP_SIZE      CM4_FIPS_HEAP_SIZE
+#endif
+#ifdef CM4_UBOOT_ENV_PART
+#define RPI_UBOOT_ENV_PART      CM4_UBOOT_ENV_PART
+#endif
+#ifdef CM4_ROOT_A
+#define RPI_ROOT_A              CM4_ROOT_A
+#endif
+#ifdef CM4_ROOT_B
+#define RPI_ROOT_B              CM4_ROOT_B
+#endif
+#ifdef CM4_SLOT_A_NAME
+#define RPI_SLOT_A_NAME         CM4_SLOT_A_NAME
+#endif
+#ifdef CM4_SLOT_B_NAME
+#define RPI_SLOT_B_NAME         CM4_SLOT_B_NAME
+#endif
+
+/* Linux console/earlycon (no root=). It must match the wolfBoot UART build:
+ *   CM4_UART_PL011 (+ dtoverlay=disable-bt) -> PL011 on GPIO14/15 = ttyAMA0. The
+ *     PL011 registers cleanly in Linux; the mini-UART (bcm2835-aux) does not on
+ *     this DTB ("unable to register 8250 port").
+ *   default (mini-UART) -> serial0/ttyS0. */
+#if defined(CM4_UART_PL011)
+#define LINUX_BOOTARGS_BASE \
+    "earlycon=pl011,mmio32,0xfe201000 console=ttyAMA0,115200"
+#else
+/* earlycon=uart8250,mmio32,0xfe215040: the mini-UART is 8250-driven with a 4-byte
+ * register stride, so LSR lands at 0xfe215054 - prints from MMIO before the dtb
+ * console driver is up. serial0 aliases the mini-UART (ttyS0) at runtime. */
+#define LINUX_BOOTARGS_BASE \
+    "earlycon=uart8250,mmio32,0xfe215040 console=serial0,115200"
+#endif
+
+#include "hal/rpi_common.h"
 
 #ifndef __ASSEMBLER__
 /* PL011 UART0 register accessors (not the debug console on this board) */
@@ -100,13 +119,6 @@
 #define MU_LSR      ((volatile unsigned int*)(BCM2711_AUX_BASE+0x54))
 #define MU_LSR_TXFF_EMPTY  0x20  /* transmit FIFO can accept a byte */
 
-/* RNG200 hardware TRNG register accessors */
-#define RNG_CTRL        ((volatile unsigned int*)(BCM2711_RNG_BASE+RNG200_CTRL))
-#define RNG_SOFT_RESET  ((volatile unsigned int*)(BCM2711_RNG_BASE+RNG200_SOFT_RESET))
-#define RNG_RBG_SOFT_RESET ((volatile unsigned int*)(BCM2711_RNG_BASE+RNG200_RBG_SOFT_RESET))
-#define RNG_INT_STATUS  ((volatile unsigned int*)(BCM2711_RNG_BASE+RNG200_INT_STATUS))
-#define RNG_FIFO_DATA   ((volatile unsigned int*)(BCM2711_RNG_BASE+RNG200_FIFO_DATA))
-#define RNG_FIFO_COUNT  ((volatile unsigned int*)(BCM2711_RNG_BASE+RNG200_FIFO_COUNT))
 #endif /* !__ASSEMBLER__ */
 
 #endif /* _CM4_H_ */

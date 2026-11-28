@@ -48,6 +48,7 @@ static uint8_t cm4_mock_emmc[0x100];
 #define CM4_RAUC_AB 1
 
 #include "../../hal/cm4.c"
+#include "../../hal/rpi_common.c"
 
 /* ---- mock disk backing the env partition -------------------------------- */
 
@@ -113,10 +114,10 @@ static void reset_mocks(void)
     mock_read_len   = UBOOT_ENV_SIZE;
     mock_write_len  = UBOOT_ENV_SIZE;
     mock_write_calls = 0;
-    cm4_rauc_selected = 0;
-    cm4_rauc_root = NULL;
-    memset(cm4_rauc_slot_name, 0, sizeof(cm4_rauc_slot_name));
-    memset(cm4_uboot_env, 0, sizeof(cm4_uboot_env));
+    rpi_rauc_selected = 0;
+    rpi_rauc_root = NULL;
+    memset(rpi_rauc_slot_name, 0, sizeof(rpi_rauc_slot_name));
+    memset(rpi_uboot_env, 0, sizeof(rpi_uboot_env));
 }
 
 /* Read a counter straight out of the mock partition (post-writeback state). */
@@ -137,9 +138,9 @@ START_TEST(test_good_env_decrements_and_persists)
     build_env("A B", 3, 3);
 
     ck_assert_int_eq(hal_boot_slot_select(), 0);
-    ck_assert_int_eq(cm4_rauc_selected, 1);
-    ck_assert_str_eq(cm4_rauc_slot_name, "A");
-    ck_assert_str_eq(cm4_rauc_root, CM4_ROOT_A);
+    ck_assert_int_eq(rpi_rauc_selected, 1);
+    ck_assert_str_eq(rpi_rauc_slot_name, "A");
+    ck_assert_str_eq(rpi_rauc_root, RPI_ROOT_A);
     ck_assert_int_eq(mock_write_calls, 1);
     /* The decrement must be on disk, not just in RAM. */
     ck_assert_int_eq((int)part_counter("BOOT_A_LEFT"), 2);
@@ -147,16 +148,16 @@ START_TEST(test_good_env_decrements_and_persists)
 }
 END_TEST
 
-/* Slot B is chosen when BOOT_ORDER asks for it, and maps to CM4_ROOT_B. */
+/* Slot B is chosen when BOOT_ORDER asks for it, and maps to RPI_ROOT_B. */
 START_TEST(test_order_selects_slot_b)
 {
     reset_mocks();
     build_env("B A", 3, 3);
 
     ck_assert_int_eq(hal_boot_slot_select(), 0);
-    ck_assert_int_eq(cm4_rauc_selected, 1);
-    ck_assert_str_eq(cm4_rauc_slot_name, "B");
-    ck_assert_str_eq(cm4_rauc_root, CM4_ROOT_B);
+    ck_assert_int_eq(rpi_rauc_selected, 1);
+    ck_assert_str_eq(rpi_rauc_slot_name, "B");
+    ck_assert_str_eq(rpi_rauc_root, RPI_ROOT_B);
     ck_assert_int_eq((int)part_counter("BOOT_B_LEFT"), 2);
 }
 END_TEST
@@ -168,9 +169,9 @@ START_TEST(test_exhausted_slot_is_skipped)
     build_env("A B", 0, 3);
 
     ck_assert_int_eq(hal_boot_slot_select(), 0);
-    ck_assert_int_eq(cm4_rauc_selected, 1);
-    ck_assert_str_eq(cm4_rauc_slot_name, "B");
-    ck_assert_str_eq(cm4_rauc_root, CM4_ROOT_B);
+    ck_assert_int_eq(rpi_rauc_selected, 1);
+    ck_assert_str_eq(rpi_rauc_slot_name, "B");
+    ck_assert_str_eq(rpi_rauc_root, RPI_ROOT_B);
 }
 END_TEST
 
@@ -182,8 +183,8 @@ START_TEST(test_all_exhausted_rearms_and_selects)
     build_env("A B", 0, 0);
 
     ck_assert_int_eq(hal_boot_slot_select(), 0);
-    ck_assert_int_eq(cm4_rauc_selected, 1);
-    ck_assert_str_eq(cm4_rauc_slot_name, "A");
+    ck_assert_int_eq(rpi_rauc_selected, 1);
+    ck_assert_str_eq(rpi_rauc_slot_name, "A");
     /* Re-armed then decremented for this boot. */
     ck_assert_int_eq((int)part_counter("BOOT_A_LEFT"),
         UBOOT_ENV_DEFAULT_TRIES - 1);
@@ -244,7 +245,7 @@ START_TEST(test_write_failure_falls_back_to_static_cmdline)
 
     ck_assert_int_eq(hal_boot_slot_select(), 0);
     ck_assert_int_eq(mock_write_calls, 1);
-    ck_assert_int_eq(cm4_rauc_selected, 0); /* -> static LINUX_BOOTARGS */
+    ck_assert_int_eq(rpi_rauc_selected, 0); /* -> static LINUX_BOOTARGS */
 }
 END_TEST
 
@@ -256,7 +257,7 @@ START_TEST(test_partial_write_falls_back)
     mock_write_len = UBOOT_ENV_SIZE / 2;
 
     ck_assert_int_eq(hal_boot_slot_select(), 0);
-    ck_assert_int_eq(cm4_rauc_selected, 0);
+    ck_assert_int_eq(rpi_rauc_selected, 0);
 }
 END_TEST
 
@@ -268,11 +269,11 @@ START_TEST(test_unknown_slot_name_falls_back)
     build_env("system0 system1", -1, -1);
 
     ck_assert_int_eq(hal_boot_slot_select(), 0);
-    ck_assert_int_eq(cm4_rauc_selected, 0);
+    ck_assert_int_eq(rpi_rauc_selected, 0);
 }
 END_TEST
 
-/* A selected slot leaves cm4_rauc_build_bootargs() able to render the line;
+/* A selected slot leaves rpi_rauc_build_bootargs() able to render the line;
  * with no slot it must refuse so the caller uses the static bootargs. */
 START_TEST(test_bootargs_follow_selection)
 {
@@ -281,13 +282,13 @@ START_TEST(test_bootargs_follow_selection)
     reset_mocks();
     build_env("A B", 3, 3);
     ck_assert_int_eq(hal_boot_slot_select(), 0);
-    ck_assert_int_eq(cm4_rauc_build_bootargs(buf, sizeof(buf)), 0);
-    ck_assert(strstr(buf, "root=" CM4_ROOT_A) != NULL);
+    ck_assert_int_eq(rpi_rauc_build_bootargs(buf, sizeof(buf)), 0);
+    ck_assert(strstr(buf, "root=" RPI_ROOT_A) != NULL);
     ck_assert(strstr(buf, "rauc.slot=A") != NULL);
 
     /* No selection -> refuse. */
-    cm4_rauc_selected = 0;
-    ck_assert_int_eq(cm4_rauc_build_bootargs(buf, sizeof(buf)), -1);
+    rpi_rauc_selected = 0;
+    ck_assert_int_eq(rpi_rauc_build_bootargs(buf, sizeof(buf)), -1);
 }
 END_TEST
 
@@ -299,11 +300,11 @@ START_TEST(test_bootargs_truncation_refused)
     reset_mocks();
     build_env("A B", 3, 3);
     ck_assert_int_eq(hal_boot_slot_select(), 0);
-    ck_assert_int_eq(cm4_rauc_build_bootargs(small, sizeof(small)), -1);
+    ck_assert_int_eq(rpi_rauc_build_bootargs(small, sizeof(small)), -1);
 }
 END_TEST
 
-Suite *cm4_rauc_suite(void)
+Suite *rpi_rauc_suite(void)
 {
     Suite *s;
     TCase *tc;
@@ -331,7 +332,7 @@ int main(void)
     int fails;
     SRunner *sr;
 
-    sr = srunner_create(cm4_rauc_suite());
+    sr = srunner_create(rpi_rauc_suite());
     srunner_run_all(sr, CK_NORMAL);
     fails = srunner_ntests_failed(sr);
     srunner_free(sr);

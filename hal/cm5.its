@@ -1,0 +1,31 @@
+/dts-v1/;
+/*
+ * hal/cm5.its - FIT template for booting Linux on the RPi CM5 via wolfBoot.
+ * Kernel-only: the DTB is taken from the RPi firmware (fully patched: RAM
+ * size, serial no.) - see hal_get_boot_dts() in hal/rpi_common.c. Point the
+ * incbin at the gzip kernel (kernel_2712.img from Raspberry Pi OS is one) and
+ * build with:
+ *   mkimage -f hal/cm5.its cm5-fitImage
+ *   tools/keytools/sign --ecc384 --sha384 cm5-fitImage <key.der> <version>
+ * Load/entry 0x10000000 matches config/examples/cm5_emmc_linux.config.
+ * Copyright (C) 2026 wolfSSL Inc.  GPLv3.
+ */
+/*
+ * The hash-1 { algo = "sha256"; } nodes below are informational only: mkimage
+ * populates their `value`, but wolfBoot does not re-verify per-image hashes here.
+ * Authentication of the whole FIT comes from the outer wolfBoot signature.
+ */
+/ {
+    description = "wolfBoot CM5 (BCM2712) Linux";
+    #address-cells = <1>;
+    images {
+        kernel-1 {
+            description = "Linux kernel (arm64, gzip)";
+            data = /incbin/("../Image.gz");
+            type = "kernel"; arch = "arm64"; os = "linux"; compression = "gzip";
+            load = <0x10000000>; entry = <0x10000000>;
+            hash-1 { algo = "sha256"; };
+        };
+    };
+    configurations { default = "conf1"; conf1 { kernel = "kernel-1"; hash-1 { algo = "sha256"; }; }; };
+};

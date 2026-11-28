@@ -503,6 +503,10 @@ ifeq ($(TARGET),cm4)
     MAIN_TARGET:=wolfboot.bin
 endif
 
+ifeq ($(TARGET),cm5)
+    MAIN_TARGET:=wolfboot.bin
+endif
+
 # i.MX 8QuadMax runs as the bare-metal BL33 loaded into DRAM by ATF, so there
 # is no contiguous flash factory.bin. Build the bootloader plus the signed
 # payload, which the packaging script assembles into the BL33 image.

@@ -9,6 +9,7 @@ This README describes configuration of supported targets.
 * [Analog Devices MAX32666](#analog-devices-max32666)
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
 * [Cortex-A72 / Raspberry Pi Compute Module 4](#cortex-a72--raspberry-pi-compute-module-4-bcm2711)
+* [Cortex-A76 / Raspberry Pi Compute Module 5](#cortex-a76--raspberry-pi-compute-module-5-bcm2712)
 * [Infineon PSoC 6](#infineon-psoc-6)
 * [Infineon PSOC Control C3](#infineon-psoc-control-c3)
 * [Infineon PSOC Edge E8](#infineon-psoc-edge-e8)
@@ -3637,7 +3638,7 @@ The eMMC uses a 6-partition layout:
 - `p5` rootfs_B ext4: slot B
 - `p6` data ext4: persistent data
 
-Key config: `CM4_RAUC_AB=1` (a make var that pulls in `src/ubootenv.o` and the RAUC branch of `hal/cm4.c`), `CFLAGS_EXTRA+=-DCM4_UBOOT_ENV_PART=<n>` (0-based GPT index of `p2`), `CFLAGS_EXTRA+=-DCM4_ROOT_A=...` / `-DCM4_ROOT_B=...` (slot rootfs devices), and optionally `-DCM4_SLOT_A_NAME=...` / `-DCM4_SLOT_B_NAME=...` (RAUC bootnames, default `"A"` / `"B"`). `tools/scripts/cm4/prepare_emmc_rauc.sh` lays out the disk and writes an initial env (`BOOT_ORDER "A B"`, tries `3`). Both slot-switch and hung-slot failover were hardware-validated. On the Yocto side, RAUC's `fw_env.config` must point at the raw `p2` partition (offset `0`, size `0x4000`) and the `system.conf` slot devices must match `p4`/`p5`, so userspace (`rauc mark-good` / `fw_setenv`) and wolfBoot agree on the env layout.
+Key config: `CM4_RAUC_AB=1` (a make var that pulls in `src/ubootenv.o` and the RAUC branch of `hal/rpi_common.c`), `CFLAGS_EXTRA+=-DCM4_UBOOT_ENV_PART=<n>` (0-based GPT index of `p2`), `CFLAGS_EXTRA+=-DCM4_ROOT_A=...` / `-DCM4_ROOT_B=...` (slot rootfs devices), and optionally `-DCM4_SLOT_A_NAME=...` / `-DCM4_SLOT_B_NAME=...` (RAUC bootnames, default `"A"` / `"B"`). `tools/scripts/cm4/prepare_emmc_rauc.sh` lays out the disk and writes an initial env (`BOOT_ORDER "A B"`, tries `3`). Both slot-switch and hung-slot failover were hardware-validated. On the Yocto side, RAUC's `fw_env.config` must point at the raw `p2` partition (offset `0`, size `0x4000`) and the `system.conf` slot devices must match `p4`/`p5`, so userspace (`rauc mark-good` / `fw_setenv`) and wolfBoot agree on the env layout.
 
 ### Footprint
 
@@ -3659,6 +3660,94 @@ the reference Yocto image builds for this board is 726 KB, or 763 KB with its co
 device tree appended. Most of that difference is scope rather than efficiency: U-Boot
 carries a shell, a network stack and a broad driver set that a verifying bootloader
 does not need.
+
+## Cortex-A76 / Raspberry Pi Compute Module 5 (BCM2712)
+
+wolfBoot runs on the Raspberry Pi Compute Module 5 (CM5), a Broadcom BCM2712 with a quad-core Cortex-A76 (AArch64). The feature set matches the [CM4 port](#cortex-a72--raspberry-pi-compute-module-4-bcm2711) (signed RAM boot, eMMC A/B disk boot, Linux FIT boot, RAUC A/B, FIPS 140-3), and the SoC-independent code is shared with it in `hal/rpi_common.c`. This section covers what differs.
+
+```
+BCM2712 boot ROM -> SPI EEPROM bootloader -> kernel image (wolfBoot)
+   -> verify (ECDSA/SHA) -> application
+```
+
+There is no `start4.elf` stage on the BCM2712: the SPI EEPROM bootloader reads `config.txt` and loads the kernel image itself. It also installs its own Arm Trusted Firmware BL31 below `0x80000` (reserved, never used by wolfBoot), enters the image at EL2 with the device tree pointer in `x0`, and provides PSCI for the secondary cores.
+
+All BCM2712 peripherals sit above 4 GB (debug PL011 at `0x107d001000`, eMMC SDHCI at `0x1000fff000`, RNG200 at `0x107d208000`), so the disk and FIPS builds use a 40-bit identity map (`cm5_mmu_enable` in `hal/cm5.c`) instead of the 4 GB map the CM4 uses. The 40-pin header UARTs, Ethernet and USB are behind the RP1 chip on PCIe and are not used.
+
+### Building
+
+```
+cp config/examples/cm5.config .config
+make CROSS_COMPILE=aarch64-none-elf- DEBUG_UART=1
+```
+
+As on the CM4, wolfBoot is built as an AArch64 Linux kernel image with the ARM64 image header and is linked at `0x200000` (`hal/cm5.ld`). Signing and assembling the boot image is the same as for the CM4: the signed application goes at offset `0xC0000` behind `wolfboot.bin`.
+
+### config.txt
+
+```
+kernel=wolfboot.img
+# wolfBoot is linked absolutely at 0x200000; pin the load address to match.
+kernel_address=0x200000
+# wolfBoot is not a Linux kernel: skip the bootloader's OS compatibility check.
+os_check=0
+```
+
+`kernel_address=0x200000` is required for the same reason as on the CM4: the startup code checks the runtime base against the link-time base and halts silently on a mismatch.
+
+The console is the SoC debug PL011 (`ttyAMA10` in Linux), on the 3-pin debug UART of the module. wolfBoot keeps the divisors the bootloader programmed when the UART is already enabled (`BOOT_UART=1` in the EEPROM configuration) and otherwise sets 115200 8N1 from the fixed 9.216 MHz UART clock.
+
+### Flashing and test boots
+
+Write `wolfboot.img` and `config.txt` to the FAT boot partition of the eMMC. With `nRPIBOOT` fitted, `rpiboot` exposes the eMMC as USB mass storage ( https://github.com/raspberrypi/usbboot ).
+
+A board that already boots Linux from another device (NVMe, for example) can test wolfBoot without touching its boot order. Put `wolfboot.img` and a `tryboot.txt` with the lines above on that device's boot partition and run `sudo reboot "0 tryboot"`. The bootloader uses `tryboot.txt` for exactly one boot; any later reset returns to the normal `config.txt`.
+
+`CFLAGS_EXTRA+=-DCM5_LOG_RING` mirrors the console into RAM at `0x7f000000` (a 64 KB ring with a `WCON` header) and arms the SoC watchdog while wolfBoot runs. The ring survives a warm reset, so the log of a test boot can be read back from Linux through `/dev/mem` when no UART is attached. Linux has to leave the page alone: reserve it with a `/reserved-memory` node (without `no-map`) in an overlay.
+
+### Boot output
+
+```
+wolfBoot CM5 (BCM2712 Cortex-A76) hal_init, EL2
+Trying partition 0 at 0x2C0000
+Checking integrity...done
+Verifying signature...done
+Firmware Valid
+Booting at 0x3080000
+```
+
+### Optional: eMMC A/B disk boot
+
+`config/examples/cm5_emmc.config` reads A/B signed images from GPT partitions on the onboard eMMC through the generic SDHCI driver (`src/sdhci.c`) and the register glue in `hal/rpi_common.c`. The controller is the BCM2712 SDIO1 block (SDHCI v3.0, `brcm,bcm2712-sdhci`); its card-detect input is not wired for the soldered eMMC, so the glue forces card presence through the controller's config block.
+
+The CM5 configs set `SDHCI_WRITE_SINGLE_BLOCK` and `SDHCI_TC_OVER_DATA_TIMEOUT`. With polled PIO transfers this controller raises Data Timeout Error when the eMMC acknowledges a written block and stops a multi-block write (`CMD25`) there. A single-block write (`CMD24`) completes with Transfer Complete set as well, which the SDHCI specification defines as a completed transfer: `SDHCI_TC_OVER_DATA_TIMEOUT` makes the driver accept that and wait for the card to release DAT0, and `SDHCI_WRITE_SINGLE_BLOCK` makes it write one block per command. Reads are not affected.
+
+### FIPS 140-3
+
+Build `config/examples/cm5.config` with `FIPS=1` as described in [FIPS.md](FIPS.md). Entropy for the DRBG comes from the BCM2712 RNG200. The in-core hash is sealed on the target in one pass, as on the CM4.
+
+### Optional: Linux kernel FIT boot
+
+`config/examples/cm5_emmc_linux.config` loads a wolfBoot-signed, gzip-compressed kernel FIT (`hal/cm5.its`) from an eMMC partition, decompresses the kernel to `0x10000000`, relocates the device tree the bootloader passed in `x0` to `0x08000000` and sets `/chosen/bootargs`. The command line is `earlycon=pl011,mmio32,0x107d001000 console=ttyAMA10,115200 root=<LINUX_BOOTARGS_ROOT> rootfstype=ext4 rootwait`. `RPI_FIRMWARE_DTB` selects the bootloader-provided device tree; the [device tree trust boundary](#device-tree-trust-boundary) described for the CM4 applies unchanged.
+
+### Optional: RAUC A/B redundant boot
+
+`config/examples/cm5_emmc_rauc.config` works as on the CM4, with the shared option names: `RPI_RAUC_AB=1` (make variable), `RPI_UBOOT_ENV_PART`, `RPI_ROOT_A`, `RPI_ROOT_B` and optionally `RPI_SLOT_A_NAME` / `RPI_SLOT_B_NAME`. The example expects `p2` to be the raw U-Boot environment and `p3` the shared signed FIT.
+
+### Validation status
+
+Validated on a CM5 (4 GB, eMMC, WiFi) on the CM5 IO board: signed RAM boot and refusal of a corrupted image, eMMC A/B version selection, rollback refusal and failover, Linux 6.18 FIT boot with four cores at EL2, RAUC slot order, try-counter writeback and exhausted-slot failover, and a sealed FIPS 140-3 boot. Not validated: CM5 Lite (microSD), SDMA transfers.
+
+### Footprint
+
+Built with `aarch64-none-elf-gcc` 14.3 and the shipped `SIGN=ECC384 HASH=SHA384`. The text/data/BSS columns are for the configs as shipped: the three disk configs default `DEBUG_UART?=1`, while `cm5.config` defaults it off.
+
+| Config | Text | Data | BSS | `wolfboot.bin` | `DEBUG_UART=0` |
+|---|---|---|---|---|---|
+| `cm5.config` (RAM boot) | 36.6 KB | 48 B | 64 B | 36.6 KB | 36.6 KB |
+| `cm5_emmc.config` | 54.6 KB | 52 B | 9.6 KB | 54.6 KB | 46.0 KB |
+| `cm5_emmc_linux.config` | 59.6 KB | 52 B | 28.6 KB | 59.7 KB | 50.4 KB |
+| `cm5_emmc_rauc.config` | 63.4 KB | 52 B | 44.9 KB | 63.4 KB | 53.5 KB |
 
 ## Xilinx Zynq UltraScale
 

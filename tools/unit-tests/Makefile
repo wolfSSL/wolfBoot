@@ -92,6 +92,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
        unit-sdhci-disk-unaligned unit-sdhci-dma-error unit-cm4-sdhci unit-cm4-rauc-slot \
+       unit-cm5-sdhci unit-sdhci-write-tc-timeout \
        unit-imx95-ahab \
        unit-sign-encrypted-output \
        unit-sign-hybrid-keyload \
@@ -1105,7 +1106,15 @@ unit-sdhci-dma-error: ../../include/target.h unit-sdhci-dma-error.c
 	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
 
+unit-sdhci-write-tc-timeout: ../../include/target.h unit-sdhci-write-tc-timeout.c
+	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
+
 unit-cm4-sdhci: ../../include/target.h unit-cm4-sdhci.c
+	gcc -o $@ $^ $(CFLAGS) -I../.. -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
+
+unit-cm5-sdhci: ../../include/target.h unit-cm5-sdhci.c
 	gcc -o $@ $^ $(CFLAGS) -I../.. -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
 

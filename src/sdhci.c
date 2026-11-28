@@ -1623,6 +1623,7 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     uint32_t block_count, reg, cmd_reg, bcr_reg;
     int is_multi_block;
     int write_settle_timeout = 0;
+    int wait_dat0 = 0;
 
     /* Determine if multi-block operation */
     is_multi_block = (dir == SDHCI_DIR_READ) ?
@@ -1901,6 +1902,18 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
      * wait-busy results below would report success for a transfer that
      * never completed. */
     reg = SDHCI_REG(SDHCI_SRS12);
+#ifdef SDHCI_TC_OVER_DATA_TIMEOUT
+    /* Transfer Complete has priority over Data Timeout Error: with both set
+     * the transfer completed (SDHCI spec, Normal Interrupt Status). The
+     * controller stopped tracking the card early, so wait out the busy on
+     * DAT0 before the next command. */
+    if ((reg & SDHCI_SRS12_TC) != 0 &&
+            (reg & SDHCI_SRS12_ERR_STAT) == SDHCI_SRS12_EDT) {
+        SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_EDT);
+        reg &= ~SDHCI_SRS12_EDT;
+        wait_dat0 = 1;
+    }
+#endif
     if ((reg & SDHCI_SRS12_ERR_STAT) == 0) {
         /* If multi-block, send CMD12 to stop transfer. This is issued even
          * when `status` is already an error, to leave the bus in a sane
@@ -1930,7 +1943,7 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
             }
         }
         if (status == 0) {
-            status = sdhci_wait_busy(0);
+            status = sdhci_wait_busy(wait_dat0);
         }
     }
     else {
@@ -1947,7 +1960,7 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
      * surfaces the bounded-out transfer and makes sure a card that never came
      * ready propagates as a failure: a silently timed-out write must NOT be
      * treated as landed, because the RAUC try-counter writeback relies on a
-     * failed write propagating (see hal/cm4.c). Safe for the CM4 EMMC2 where TC
+     * failed write propagating (rpi_common.c). Safe for the CM4 EMMC2 where TC
      * legitimately never precedes CMD12: after CMD12 the card reports ready. */
     if (write_settle_timeout) {
         wolfBoot_printf("sdhci_transfer: multi-block write settle timeout "
@@ -2347,6 +2360,11 @@ int disk_write(int drv, uint64_t start, uint32_t count, const uint8_t *buf)
         else {
             /* direct full block(s) write */
             uint32_t blocks = (count / SDHCI_BLOCK_SIZE);
+        #ifdef SDHCI_WRITE_SINGLE_BLOCK
+            /* One CMD24 per block, for a controller that cannot complete a
+             * multi-block write. */
+            blocks = 1;
+        #endif
             write_sz = (blocks * SDHCI_BLOCK_SIZE);
             status = sdhci_write(blocks > 1 ?
                                 MMC_CMD25_WRITE_MULTIPLE :
