@@ -1,0 +1,104 @@
+;; e31b_debug.cmm
+;;
+;; Connect TRACE32 to the NXP MCXE31B (FRDM-MCXE31B) and halt the CPU at the
+;; reset vector, then load the wolfBoot and test-app symbols.
+;; No arguments: DO e31b_debug.cmm
+;;
+;; Board setup (UM12330):
+;;   - Lauterbach 10-pin cable on J14 (SWD/JTAG 2x5 header)
+;;   - JP5 SHORTED: disables the onboard MCU-Link SWD so it does not fight
+;;     the external probe on SWDIO/SWCLK
+;;   - The MCU-Link VCOM console (LPUART5, 115200 8N1) stays available
+;;
+;; Notes:
+;;   - TRACE32 R2024.09 has no MCXE31B entry. The S32K314 has the same debug
+;;     architecture (AHB-AP 4 = CM7_0, MDM-AP 6, SDA-AP 7) and flash
+;;     controller. Only SWD works on J14.
+;;   - SYStem.Up resets the chip and halts it at the reset vector, but often
+;;     reports a debug port time-out while the boot ROM runs. Attaching
+;;     afterwards finds the core halted.
+;;   - All output, including errors, is logged to ~~/e31b_debug.log
+;;   - The ELF files are loaded from the wolfBoot checkout this script is in.
+
+; wolfBoot root: three levels above this script
+&basedir=OS.PPD()+"\..\..\.."
+
+AREA.OPEN A000 "~~/e31b_debug.log" /Create /NoFileCache
+PRINT "e31b_debug.cmm " DATE.DATE() " " DATE.TIME()
+
+RESet
+SYStem.RESet
+SYStem.CPU S32K314-M7
+SYStem.CONFIG.DEBUGPORTTYPE SWD
+SYStem.Option DUALPORT ON
+SYStem.MemAccess DAP
+Trace.DISable
+
+; reset and halt at the reset vector, retrying with a slow debug clock
+SYStem.JtagClock 10MHz
+PRINT "[1] SYStem.Up @ 10MHz"
+ON ERROR CONTinue
+SYStem.Up
+ON ERROR inherit
+
+IF !SYStem.Up()
+(
+  PRINT "[2] SYStem.Mode Attach @ 10MHz"
+  ON ERROR CONTinue
+  SYStem.Mode Attach
+  ON ERROR inherit
+)
+
+IF !SYStem.Up()
+(
+  PRINT "[3] SYStem.Up @ 1MHz"
+  SYStem.Down
+  SYStem.JtagClock 1MHz
+  ON ERROR CONTinue
+  SYStem.Up
+  ON ERROR inherit
+)
+
+IF !SYStem.Up()
+(
+  PRINT %ERROR "MCXE31B: connection failed (check JP5 shorted, cable on J14, board powered)"
+  AREA.CLOSE A000
+  ENDDO
+)
+
+IF STATE.RUN()
+(
+  ON ERROR CONTinue
+  Break
+  ON ERROR inherit
+)
+
+IF STATE.RUN()
+(
+  PRINT %ERROR "MCXE31B: connected but CPU did not halt"
+  AREA.CLOSE A000
+  ENDDO
+)
+
+PRINT "MCXE31B halted, PC=0x"+FORMAT.HEX(8.,Register(PC))+" SP=0x"+FORMAT.HEX(8.,Register(SP))
+AREA.CLOSE A000
+
+mode.hll
+
+IF OS.FILE("&basedir\wolfboot.elf")
+  data.load.elf "&basedir\wolfboot.elf" /nocode
+IF OS.FILE("&basedir\test-app\image.elf")
+  data.load.elf "&basedir\test-app\image.elf" /nocode /noclear
+; The ELF files hold the paths of the build machine. Look the sources up in
+; this checkout instead, so it also works when TRACE32 runs on another host
+; (e.g. Windows with the checkout in WSL).
+; Sources are found by file name in these directories.
+sYmbol.SourcePATH.SetBaseDir "&basedir"
+&srcdirs="""&basedir"" ""&basedir\src"" ""&basedir\hal"" ""&basedir\test-app"""
+&srcdirs="&srcdirs ""&basedir\lib\wolfssl\wolfcrypt\src"""
+; wolfIP and its MCXE31B port (test-app built with ENABLE_WOLFIP=1)
+&srcdirs="&srcdirs ""&basedir\lib\wolfip\src"" ""&basedir\lib\wolfip\src\tftp"""
+&srcdirs="&srcdirs ""&basedir\lib\wolfip\src\port\nxp_mcxe_emac"""
+sYmbol.SourcePATH.Set &srcdirs
+
+ENDDO

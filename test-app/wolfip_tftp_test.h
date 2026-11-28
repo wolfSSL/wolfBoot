@@ -34,9 +34,19 @@ int wolfip_tftp_test_run(void);
  * Convenience wrapper so each target app's main() is a single call. */
 void wolfip_tftp_test_report(void);
 
-#ifdef WOLFIP_PORT_MCXE_ENET
+/* Cortex-M ports without a free-running timer of their own take the time
+ * and the stop request from the target app */
+#if defined(WOLFIP_PORT_MCXE_ENET) || defined(WOLFIP_PORT_MCXE_EMAC)
+#define WOLFIP_TEST_APP_TIMEBASE
+#endif
+
+#ifdef WOLFIP_TEST_APP_TIMEBASE
 /* Milliseconds since start, monotonic. Provided by the target app. */
 uint64_t wolfip_test_get_ms(void);
+
+/* Non-zero when the user asked to stop (Ctrl-C on the console). Provided by
+ * the target app; polled by the throughput server. */
+int wolfip_test_abort(void);
 #endif
 
 #endif /* WOLFIP_TFTP_TEST_H */
