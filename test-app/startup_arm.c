@@ -28,6 +28,12 @@ extern unsigned int _start_bss;
 extern unsigned int _end_bss;
 extern unsigned int _end_stack;
 extern unsigned int _start_heap;
+#ifdef APP_RAMCODE_L
+/* Hot code copied from flash to a second RAM region at reset */
+extern unsigned int _stored_ramcode_l;
+extern unsigned int _start_ramcode_l;
+extern unsigned int _end_ramcode_l;
+#endif
 
 #ifdef TARGET_stm32f4
 extern void isr_tim2(void);
@@ -54,6 +60,17 @@ extern void isr_debug_uart(void);
 #define isr_lpuart0 isr_empty
 #define isr_lpuart1 isr_debug_uart
 #define isr_lpuart2 isr_empty
+#endif
+/* MCXE247 ENET transmit, receive and error interrupts (IRQ 73-75) */
+#if defined(MCXE247) && defined(NXP_MCXE_ENET_IRQ) && (NXP_MCXE_ENET_IRQ == 1)
+extern void nxp_mcxe_enet_irq_handler(void);
+#define isr_irq73 nxp_mcxe_enet_irq_handler
+#define isr_irq74 nxp_mcxe_enet_irq_handler
+#define isr_irq75 nxp_mcxe_enet_irq_handler
+#else
+#define isr_irq73 isr_empty
+#define isr_irq74 isr_empty
+#define isr_irq75 isr_empty
 #endif
 #endif
 
@@ -115,6 +132,15 @@ void isr_reset(void)
         dst++;
         src++;
     }
+#ifdef APP_RAMCODE_L
+    src = (unsigned int *) &_stored_ramcode_l;
+    dst = (unsigned int *) &_start_ramcode_l;
+    while (dst < (unsigned int *)&_end_ramcode_l) {
+        *dst = *src;
+        dst++;
+        src++;
+    }
+#endif
 
     dst = &_start_bss;
     while (dst < (unsigned int *)&_end_bss) {
@@ -560,9 +586,9 @@ void (* const IV[])(void) =
     isr_empty,              // CAN0_MB16_31 70
     isr_empty,              // FTM0_Ch0_Ch1 71
     isr_empty,              // FTM0_Ch2_Ch3 72
-    isr_empty,              // FTM0_Ch4_Ch5 73
-    isr_empty,              // FTM0_Ch6_Ch7 74
-    isr_empty,              // FTM0_Fault 75
+    isr_irq73,              // FTM0_Ch4_Ch5 73 (MCXE247: ENET_Transmit)
+    isr_irq74,              // FTM0_Ch6_Ch7 74 (MCXE247: ENET_Receive)
+    isr_irq75,              // FTM0_Fault 75 (MCXE247: ENET_Error)
     isr_empty,              // FTM0_Ovf_Reload 76
     isr_empty,              // FTM1_Ch0_Ch1 77
     isr_empty,              // FTM1_Ch2_Ch3 78

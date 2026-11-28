@@ -89,6 +89,14 @@ uint64_t wolfip_test_get_ms(void)
 
     return ((uint64_t)hi << 32) | lo;
 }
+
+#ifndef DEBUG_UART
+/* No console: the network test cannot be cancelled */
+int wolfip_test_abort(void)
+{
+    return 0;
+}
+#endif
 #endif
 
 static void delay_ms(uint32_t ms)
@@ -99,12 +107,17 @@ static void delay_ms(uint32_t ms)
     }
 }
 
-static void systick_init(void)
+/* 1 ms tick from the core clock running at core_hz */
+static void systick_set(uint32_t core_hz)
 {
-    /* Configure SysTick for 1ms tick */
-    SYST_RVR = (CLOCK_SPEED / 1000) - 1;
+    SYST_RVR = (core_hz / 1000) - 1;
     SYST_CVR = 0;
     SYST_CSR = SYST_CSR_ENABLE | SYST_CSR_TICKINT | SYST_CSR_CLKSOURCE;
+}
+
+static void systick_init(void)
+{
+    systick_set(CLOCK_SPEED);
 }
 
 /* ============== LED Functions ============== */
@@ -324,7 +337,8 @@ static void print_hex(const uint8_t* buffer, uint32_t length, int dumpChars)
 
 static const char* part_state_name(uint8_t state, int state_retval)
 {
-    if (state_retval == 0) {
+    /* wolfBoot_get_partition_state() returns 0 when it read a state */
+    if (state_retval != 0) {
         return "(no trailer)";
     }
     switch (state) {
@@ -443,6 +457,9 @@ static void print_keystore_info(void)
 #define XMODEM_PAYLOAD_SIZE     128
 #define XMODEM_PACKET_SIZE_CRC  (3 + XMODEM_PAYLOAD_SIZE + 2)  /* SOH + blk + ~blk + data + CRC16 */
 #define XMODEM_TIMEOUT_MS       1000
+/* Space in the update partition below its trailer sectors */
+#define XMODEM_MAX_SIZE         (WOLFBOOT_PARTITION_SIZE - \
+                                 (WOLFBOOT_TRAILER_SECTORS * WOLFBOOT_SECTOR_SIZE))
 
 /* CRC-16-CCITT for XMODEM-CRC mode */
 static uint16_t APP_RAMFUNCTION crc16_ccitt(const uint8_t* data, int len)
@@ -505,10 +522,12 @@ static int APP_RAMFUNCTION xmodem_receive_ram(xmodem_state_t *state)
     uint8_t payload[XMODEM_PAYLOAD_SIZE];
     uint8_t pkt_num = 0, pkt_num_expected = 0xFF;
     uint32_t t_size = 0;
+    uint32_t img_size;
     uint32_t now;
     uint32_t i = 0;
     int transfer_started = 0;
     int eot_expected = 0;
+    int dup;
     int ret = -1;
 
     state->dst_offset = 0;
@@ -551,10 +570,6 @@ static int APP_RAMFUNCTION xmodem_receive_ram(xmodem_state_t *state)
             led_red_on();  /* Indicate transfer complete */
             ret = 0;
             break;
-        } else if (eot_expected) {
-            uart_tx(XNAK);
-            ret = -1;
-            break;
         }
 
         /* Validate SOH */
@@ -569,9 +584,14 @@ static int APP_RAMFUNCTION xmodem_receive_ram(xmodem_state_t *state)
         if ((uint8_t)(~xpkt[2]) == pkt_num) {
             uint16_t recv_crc, calc_crc;
 
+            dup = 0;
             if (!transfer_started) {
                 pkt_num_expected = pkt_num;
                 transfer_started = 1;
+            } else if (state->dst_offset > 0U &&
+                    pkt_num == (uint8_t)(pkt_num_expected - 1U)) {
+                /* The last block again: the sender missed its ACK */
+                dup = 1;
             } else if (pkt_num_expected != pkt_num) {
                 uart_tx(XNAK);
                 continue;
@@ -589,7 +609,30 @@ static int APP_RAMFUNCTION xmodem_receive_ram(xmodem_state_t *state)
                        xpkt[XMODEM_PACKET_SIZE_CRC - 1];
             calc_crc = crc16_ccitt(xpkt + 3, XMODEM_PAYLOAD_SIZE);
 
-            if (recv_crc == calc_crc) {
+            if (recv_crc == calc_crc && dup) {
+                /* Already written: only ACK it again */
+                uart_tx(XACK);
+            } else if (recv_crc == calc_crc) {
+                /* A block past the end of the image, or one that would reach
+                 * the trailer sectors of the update partition */
+                if (eot_expected ||
+                        state->dst_offset + XMODEM_PAYLOAD_SIZE > XMODEM_MAX_SIZE) {
+                    xmodem_cancel();
+                    ret = -1;
+                    break;
+                }
+                /* The image size (header offset 4) must fit, checked before
+                 * the first block is ACKed or written */
+                if (state->dst_offset == 0U) {
+                    ram_memcpy(&img_size, xpkt + 3 + 4, sizeof(img_size));
+                    if (img_size > XMODEM_MAX_SIZE - IMAGE_HEADER_SIZE) {
+                        xmodem_cancel();
+                        ret = -1;
+                        break;
+                    }
+                    t_size = img_size + IMAGE_HEADER_SIZE;
+                }
+
                 /* Copy payload using RAM-based memcpy */
                 ram_memcpy(payload, xpkt + 3, XMODEM_PAYLOAD_SIZE);
 
@@ -610,12 +653,7 @@ static int APP_RAMFUNCTION xmodem_receive_ram(xmodem_state_t *state)
                 pkt_num_expected++;
                 state->dst_offset += XMODEM_PAYLOAD_SIZE;
 
-                /* Get expected size from header (offset 4 = image size) */
-                if (t_size == 0 && state->dst_offset >= 8) {
-                    t_size = *(uint32_t*)(payload + 4) + IMAGE_HEADER_SIZE;
-                }
-
-                if (t_size > 0 && state->dst_offset >= t_size) {
+                if (state->dst_offset >= t_size) {
                     eot_expected = 1;
                 }
             } else {
@@ -667,8 +705,13 @@ static int cmd_update_xmodem(void)
     }
 #else
     (void)erase_addr;
-    (void)erase_ret;
-    hal_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS, WOLFBOOT_PARTITION_SIZE);
+    erase_ret = hal_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+                                WOLFBOOT_PARTITION_SIZE);
+    if (erase_ret != 0) {
+        printf("Erase FAILED (%d)\r\n", erase_ret);
+        hal_flash_lock();
+        return -1;
+    }
 #endif
 
     printf("Done.\r\n");
@@ -880,11 +923,45 @@ static int cmd_update(const char *args)
 }
 
 #ifdef ENABLE_WOLFIP
+/* S32K1XX_HSRUN_SPEED_TEST runs the throughput server in HSRUN at 112 MHz
+ * and returns to RUN at 80 MHz after it, before anything can write flash.
+ * The ENET driver is started inside, so it times itself at 112 MHz. */
+#if defined(S32K1XX_HSRUN_SPEED_TEST) && defined(WOLFIP_SPEED_TEST) && \
+    !defined(WOLFBOOT_TEST_TFTP)
+#ifndef S32K1XX_CLOCK_80MHZ
+#error "S32K1XX_HSRUN_SPEED_TEST needs S32K1XX_CLOCK_80MHZ"
+#endif
+#define NETWORK_TEST_HSRUN
+#endif
+
 static int cmd_network(const char *args)
 {
     (void)args;
+#ifdef NETWORK_TEST_HSRUN
+    if (s32k1xx_clock_hsrun() == 0)
+        systick_set(S32K1XX_HSRUN_CLOCK_SPEED);
+    else
+        printf("HSRUN not allowed, staying at 80 MHz\r\n");
+#endif
     wolfip_tftp_test_report();
+#ifdef NETWORK_TEST_HSRUN
+    s32k1xx_clock_run();
+    systick_set(CLOCK_SPEED);
+#endif
     return 0;
+}
+
+/* Non-zero when Ctrl-C arrived on the console. Other input is discarded. */
+int wolfip_test_abort(void)
+{
+    char c;
+    int abort = 0;
+
+    while (uart_getc(&c) > 0) {
+        if (c == 0x03)
+            abort = 1;
+    }
+    return abort;
 }
 #endif
 
@@ -986,6 +1063,14 @@ void main(void)
 
     /* Ensure FIRC clock is running at 48 MHz for UART */
     clock_ensure_firc();
+#ifdef S32K1XX_CLOCK_80MHZ
+    /* wolfBoot hands over on SIRC or FIRC: run the core at 80 MHz. The UART
+     * stays on FIRC; SysTick follows CLOCK_SPEED. */
+    s32k1xx_clock_80mhz();
+#endif
+#ifdef S32K1XX_CODE_CACHE
+    s32k1xx_code_cache_enable();
+#endif
 
 #ifdef DEBUG_UART
     /* Reinitialize UART - bootloader may have changed settings in hal_prepare_boot */

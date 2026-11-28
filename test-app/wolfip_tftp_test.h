@@ -37,6 +37,10 @@ void wolfip_tftp_test_report(void);
 #ifdef WOLFIP_PORT_MCXE_ENET
 /* Milliseconds since start, monotonic. Provided by the target app. */
 uint64_t wolfip_test_get_ms(void);
+
+/* Non-zero when the user asked to stop (Ctrl-C on the console). Provided by
+ * the target app; polled by the throughput server. */
+int wolfip_test_abort(void);
 #endif
 
 #endif /* WOLFIP_TFTP_TEST_H */

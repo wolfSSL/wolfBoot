@@ -35,10 +35,13 @@
  *   - SPLL: System PLL (up to 160 MHz VCO, /2 for SPLL_CLK)
  *
  * Run modes:
- *   - RUN: Up to 80 MHz core clock (requires SPLL, currently using FIRC at 48 MHz)
+ *   - RUN: Up to 80 MHz core clock (requires SOSC + SPLL)
  *   - HSRUN: Up to 112 MHz core clock (requires SOSC + SPLL, not implemented yet)
  *
  * Default: RUN mode with FIRC at 48 MHz (no external crystal required)
+ * S32K1XX_CLOCK_80MHZ: RUN mode at 80 MHz from SOSC + SPLL. The crystal
+ *   frequency is S32K1XX_SOSC_FREQ (default 8 MHz).
+ * S32K1XX_CODE_CACHE: enable the LMEM code cache for flash.
  * To enable HSRUN mode (112 MHz), define S32K1XX_CLOCK_HSRUN (requires SOSC + SPLL)
  */
 
@@ -69,9 +72,13 @@
 #define SYST_CSR_CLKSOURCE  (1UL << 2)
 #define SYST_CSR_COUNTFLAG  (1UL << 16)
 
-/* Clock speed (FIRC = 48 MHz) */
+/* Core clock: FIRC = 48 MHz, or the SPLL at 80 MHz */
 #ifndef CLOCK_SPEED
+#ifdef S32K1XX_CLOCK_80MHZ
+#define CLOCK_SPEED         80000000UL
+#else
 #define CLOCK_SPEED         48000000UL
+#endif
 #endif
 
 /* ============== NVIC - Nested Vectored Interrupt Controller ============== */
@@ -153,11 +160,35 @@
 #define SCG_SPLLCFG_MULT_SHIFT  16
 #define SCG_SPLLCFG_PREDIV_SHIFT 8
 
+/* SPLL DIV fields: 1 = /1, 2 = /2, 3 = /4, 4 = /8 */
+#define SCG_SPLLDIV_SPLLDIV1_SHIFT 0
+#define SCG_SPLLDIV_SPLLDIV2_SHIFT 8
+
+/* SOSC CSR fields */
+#define SCG_SOSCCSR_SOSCEN      (1UL << 0)
+#define SCG_SOSCCSR_SOSCVLD     (1UL << 24)
+
+/* SOSC CFG fields */
+#define SCG_SOSCCFG_EREFS       (1UL << 2)  /* Use the crystal oscillator */
+#define SCG_SOSCCFG_RANGE_HIGH  (3UL << 4)  /* 8-40 MHz, required for SPLL */
+
+/* LMEM - Local Memory Controller (4 KB code cache) */
+#define LMEM_BASE           (0xE0082000UL)
+#define LMEM_PCCCR          (*(volatile uint32_t *)(LMEM_BASE + 0x000UL)) /* Cache control */
+#define LMEM_PCCRMR         (*(volatile uint32_t *)(LMEM_BASE + 0x020UL)) /* Cache regions mode */
+
+#define LMEM_PCCCR_ENCACHE  (1UL << 0)
+#define LMEM_PCCCR_INVW0    (1UL << 24)
+#define LMEM_PCCCR_INVW1    (1UL << 26)
+#define LMEM_PCCCR_GO       (1UL << 31)
+/* Region 2 (FlexNVM, 0x10000000) mode. It must be non-cacheable on MCXE247. */
+#define LMEM_PCCRMR_R2_MASK (3UL << 26)
+
 /* SMC - System Mode Controller */
 #define SMC_BASE            (0x4007E000UL)
-#define SMC_PMPROT          (*(volatile uint32_t *)(SMC_BASE + 0x000UL))
-#define SMC_PMCTRL          (*(volatile uint32_t *)(SMC_BASE + 0x004UL))
-#define SMC_PMSTAT          (*(volatile uint32_t *)(SMC_BASE + 0x008UL))
+#define SMC_PMPROT          (*(volatile uint32_t *)(SMC_BASE + 0x008UL))
+#define SMC_PMCTRL          (*(volatile uint32_t *)(SMC_BASE + 0x00CUL))
+#define SMC_PMSTAT          (*(volatile uint32_t *)(SMC_BASE + 0x014UL))
 
 #define SMC_PMPROT_AHSRUN   (1UL << 7)  /* Allow HSRUN */
 #define SMC_PMCTRL_RUNM_SHIFT 5
@@ -656,6 +687,24 @@
 /* These functions are implemented in hal/s32k1xx.c when DEBUG_UART is defined.
  * They use the LPUART instance and pins configured by the DEBUG_UART_* macros.
  */
+
+#ifdef S32K1XX_CLOCK_80MHZ
+/* Switch the core to 80 MHz (SOSC + SPLL). For an application started by
+ * wolfBoot, which hands over on the SIRC or FIRC. The LPUART keeps its FIRC
+ * clock. */
+void s32k1xx_clock_80mhz(void);
+/* Switch between HSRUN at 112 MHz and RUN at 80 MHz. Flash cannot be
+ * programmed or erased in HSRUN. s32k1xx_clock_hsrun() returns -1 if HSRUN
+ * cannot be allowed (SMC_PMPROT already written without AHSRUN). */
+#define S32K1XX_HSRUN_CLOCK_SPEED 112000000UL
+int s32k1xx_clock_hsrun(void);
+void s32k1xx_clock_run(void);
+#endif
+#ifdef S32K1XX_CODE_CACHE
+/* Enable the LMEM code cache for flash. The HAL flash erase and program
+ * functions invalidate it. */
+void s32k1xx_code_cache_enable(void);
+#endif
 
 #ifdef DEBUG_UART
 /* Initialize the UART with configured LPUART and pins */

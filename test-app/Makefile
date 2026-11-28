@@ -1755,30 +1755,28 @@ ifeq ($(ENABLE_WOLFIP),1)
     ifeq ($(filter -DMCXE247,$(CFLAGS_EXTRA)),)
       $(error ENABLE_WOLFIP=1 on s32k1xx is only supported on MCXE247)
     endif
-    ifeq ($(wildcard $(MCUXPRESSO)/drivers/enet/fsl_enet.c),)
-      $(error ENABLE_WOLFIP=1 on MCXE247 needs MCUXPRESSO set to an MCUXpresso SDK checkout)
-    endif
     WOLFIP_PORT:=nxp_mcxe_enet
     WOLFIP_PORT_OBJ:=nxp_mcxe_enet.o
     LSCRIPT_TEMPLATE=ARM-s32k1xx-wolfip.ld
     # Clear all of SRAM_U at reset, before the stack is used (ECC)
     CFLAGS+=-DAPP_RAM_ECC_INIT
-    # The generic MCUXPRESSO_* defaults describe a different part
-    MCXE247_DEVICE:=$(MCUXPRESSO)/devices/MCX/MCXE/MCXE247
-    CFLAGS+=-DWOLFIP_PORT_MCXE_ENET -DCPU_MCXE247VLL
-    # The TFTP receive buffer shares the 124KB of SRAM_U
+    # Hot code in SRAM_L (.ramcode_l in ARM-s32k1xx-wolfip.ld)
+    CFLAGS+=-DAPP_RAMCODE_L
+    CFLAGS+=-DWOLFIP_PORT_MCXE_ENET -DNXP_MCXE_ENET_IRQ=1
     CFLAGS+=-DTFTP_RAM_MAX=0xA000U
-    CFLAGS+=-I$(MCXE247_DEVICE) -I$(MCXE247_DEVICE)/drivers
-    CFLAGS+=-I$(MCXE247_DEVICE)/../periph0
-    CFLAGS+=-I$(MCUXPRESSO)/drivers/common -I$(MCUXPRESSO)/drivers/enet
-    CFLAGS+=-I$(MCUXPRESSO)/components/phy
-    CFLAGS+=-I$(MCUXPRESSO)/components/phy/device/phylan8741
-    CFLAGS+=-I$(MCUXPRESSO)/arch/arm/CMSIS/Core/Include
-    APP_OBJS+=$(MCUXPRESSO)/drivers/enet/fsl_enet.o
-    APP_OBJS+=$(MCUXPRESSO)/drivers/common/fsl_common.o
-    APP_OBJS+=$(MCUXPRESSO)/drivers/common/fsl_common_arm.o
-    APP_OBJS+=$(MCXE247_DEVICE)/drivers/fsl_clock.o
-    APP_OBJS+=$(MCUXPRESSO)/components/phy/device/phylan8741/fsl_phylan8741.o
+    # wolfIP state is in the 128KB of SRAM_L (ARM-s32k1xx-wolfip.ld): six
+    # full segments of TCP buffering per socket
+    CFLAGS+=-DRXBUF_SIZE=9216 -DTXBUF_SIZE=9216
+    # remove -ffreestanding so small memcpy's can be inlined
+    WOLFIP_CFLAGS_FILTEROUT:=-ffreestanding
+    # -O2 for some network objects is 10-18% faster.
+    # Take at most 8 frames per wolfIP_poll() so the app can drain a socket
+    # between batches.
+    WOLFIP_CFLAGS_ADD:=-O2 -DWOLFIP_POLL_BUDGET=8
+    # Driver cycle counters for the throughput test's CPU breakdown
+    ifeq ($(WOLFIP_SPEED_TEST),1)
+      CFLAGS+=-DNXP_MCXE_ENET_STATS=1
+    endif
   else
     WOLFIP_PORT:=nxp_fman
     WOLFIP_PORT_OBJ:=nxp_fman.o
@@ -1808,9 +1806,9 @@ ifeq ($(ENABLE_WOLFIP),1)
   # wolfIP TUs need the port headers first (so config.h resolves to the
   # port copy) and tolerate wolfIP's own style; drop -Werror/-Wstack-usage.
   WOLFIP_CFLAGS:=-I"$(WOLFIP_PORTDIR)" -I"$(WOLFBOOT_LIB_WOLFIP)" \
-    $(filter-out -Werror -Wstack-usage=$(STACK_USAGE_LIMIT),$(CFLAGS)) \
+    $(filter-out -Werror -Wstack-usage=$(STACK_USAGE_LIMIT) $(WOLFIP_CFLAGS_FILTEROUT),$(CFLAGS)) \
     -DWOLFIP_ENABLE_TFTP=$(if $(filter 1,$(WOLFBOOT_TEST_TFTP)),1,0) \
-    -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers
+    -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers $(WOLFIP_CFLAGS_ADD)
 endif
 
 ifeq ($(WOLFHSM_CLIENT),1)
